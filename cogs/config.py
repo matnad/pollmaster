@@ -1,3 +1,5 @@
+import logging
+
 import discord
 from discord.ext import commands
 
@@ -74,4 +76,6 @@ class Config:
             await self.bot.say(f'Server role `{role}` not found.')
 
 def setup(bot):
+    global logger
+    logger = logging.getLogger('bot')
     bot.add_cog(Config(bot))

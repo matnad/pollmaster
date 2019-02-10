@@ -1,11 +1,6 @@
 import discord
 
-class Settings:
-    def __init__(self):
-        self.color = discord.Colour(int('7289da', 16))
-        self.title_icon = "http://mnadler.ch/img/donat-chart-32.png"
-
-SETTINGS = Settings()
+from essentials.settings import SETTINGS
 
 async def get_pre(bot, message):
     '''Gets the prefix for a message.'''
@@ -21,6 +16,7 @@ async def get_pre(bot, message):
     else:
         return await get_server_pre(bot, message.server)
 
+
 async def get_server_pre(bot, server):
     '''Gets the prefix for a server.'''
     try:
@@ -33,13 +29,12 @@ async def get_server_pre(bot, server):
 
 
 async def get_servers(bot, message, short=None):
+    '''Get best guess of relevant shared servers'''
     if message.server is None:
-
         list_of_shared_servers = []
         for s in bot.servers:
             if message.author.id in [m.id for m in s.members]:
                 list_of_shared_servers.append(s)
-
         if short is not None:
             query = bot.db.polls.find({'short': short})
             if query is not None:
@@ -54,10 +49,9 @@ async def get_servers(bot, message, short=None):
             return []
         else:
             return list_of_shared_servers
-
-
     else:
         return [message.server]
+
 
 async def ask_for_server(bot, message, short=None):
     server_list = await get_servers(bot, message, short)
@@ -94,6 +88,7 @@ async def ask_for_server(bot, message, short=None):
                         valid_reply = True
 
         return server_list[nr - 1]
+
 
 async def ask_for_channel(bot, server, message):
     # if performed from a channel, return that channel
