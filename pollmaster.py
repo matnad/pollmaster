@@ -53,47 +53,20 @@ async def on_ready():
     bot.db = mongo.pollmaster
     bot.session = aiohttp.ClientSession()
     print(bot.db)
-    await bot.change_presence(game=discord.Game(name=f'pm!help'))
+    await bot.change_presence(game=discord.Game(name=f'V2 IS HERE >> pm!help'))
 
     # check discord server configs
-    server_admins = []
     db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
     for server in bot.servers:
-        if server.owner not in server_admins:
-            server_admins.append(server.owner)
-
         if server.id not in db_server_ids:
-
             # create new config entry
             await bot.db.config.update_one(
                 {'_id': str(server.id)},
                 {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
                 upsert=True
             )
-    print(", ".join([u.name for u in server_admins]))
-    #await import_old_database(bot, server)
-    # text = 'Test Update Notice. Please Ignore.'
-    text = "**Dear Server Admin!**\n\n" \
-           "After more than a year in the field, today Pollmaster received it's first big update and I am excited to present you the new Version!\n\n" \
-           "**TL;DR: A massive overhaul of every function. The new (now customizable) prefix is `pm!` and you can find the rest of the commands with `pm!help`**\n\n" \
-           "**Here are some more highlights:**\n" \
-           "🔹 Voting is no longer done per text, but by using reactions\n" \
-           "🔹 Creating new polls is now an interactive process instead of command lines\n" \
-           "🔹 There is now a settings for multiple choice polls\n" \
-           "🔹 You can use all the commands in a private message with Pollmaster to reduce spam in your channels\n\n" \
-           "For the full changelog, please visit: https://github.com/matnad/pollmaster/blob/master/changelog.md\n" \
-           "All your old polls should be converted to the new format and accessible with `pm!show` or `pm!show closed`.\n" \
-           "If you have any problems or questions, please join the support discord: https://discord.gg/Vgk8Nve\n\n" \
-           "**No action from you is required. But you might want to update permissions for your users. " \
-           "See pm!help -> configuration**\n\n" \
-           "I hope you enjoy the new Pollmaster!\n" \
-           "Regards, Newti#0654"
-
-    embed = discord.Embed(title="Pollmaster updated to version 2!", description=text, color=SETTINGS.color)
-    embed.set_thumbnail(url=SETTINGS.report_icon)
-    embed.set_footer(text="This message will only be sent once and is to inform you of an important update.")
-    await bot.send_message(bot.owner, embed= embed)
-
+            import_old_database(bot, server)
+            print(str(server), "updated.")
 
 
 @bot.event
