@@ -74,10 +74,6 @@ class PollControls:
 
                 # Activate Poll
                 p.active = True
-                if p.duration_type == 'timespan':
-                    # add the the time between creation and activation to the duration
-                    # -> "restart" the duration
-                    p.duration += (p.get_activation_date() - p.time_created) / 60
                 await p.save_to_db()
                 await ctx.invoke(self.show, short)
             else:

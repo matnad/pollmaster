@@ -3,7 +3,6 @@ import logging
 import aiohttp
 import discord
 
-
 from discord.ext import commands
 from motor.motor_asyncio import AsyncIOMotorClient
 
@@ -40,7 +39,7 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
-extensions = ['cogs.config','cogs.poll_controls', 'cogs.help', 'cogs.db_api']
+extensions = ['cogs.config', 'cogs.poll_controls', 'cogs.help', 'cogs.db_api']
 for ext in extensions:
     bot.load_extension(ext)
 
@@ -56,17 +55,25 @@ async def on_ready():
     await bot.change_presence(game=discord.Game(name=f'V2 IS HERE >> pm!help'))
 
     # check discord server configs
-    db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
-    for server in bot.servers:
-        if server.id not in db_server_ids:
-            # create new config entry
-            await bot.db.config.update_one(
-                {'_id': str(server.id)},
-                {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
-                upsert=True
-            )
-            import_old_database(bot, server)
-            print(str(server), "updated.")
+    try:
+        db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
+        for server in bot.servers:
+            if server.id not in db_server_ids:
+                # create new config entry
+                await bot.db.config.update_one(
+                    {'_id': str(server.id)},
+                    {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
+                    upsert=True
+                )
+                try:
+                    await import_old_database(bot, server)
+                    print(str(server), "updated.")
+                except:
+                    print(str(server.id), "failed.")
+    except:
+        print("Problem verifying servers.")
+
+    print("Servers verified. Bot running.")
 
 
 @bot.event

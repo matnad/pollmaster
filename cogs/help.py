@@ -49,7 +49,7 @@ class Help:
         if page == '🏠':
             ## POLL CREATION SHORT
             embed.add_field(name='🆕 Making New Polls',
-                            value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
+                            value=f'`{pre}quick` | `{pre}new` | `{pre}prepare`', inline=False)
             # embed.add_field(name='Commands', value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
             # embed.add_field(name='Arguments', value=f'Arguments: `<poll question>` (optional)', inline=False)
             # embed.add_field(name='Examples', value=f'Examples: `{pre}new` | `{pre}quick What is the greenest color?`',
@@ -183,7 +183,7 @@ class Help:
                             inline=False)
             embed.add_field(name='🔹 **Support Server**',
                             value='If you need help with pollmaster, want to try him out or would like to give feedback '
-                                  'to the developer, feel free to join the support server: ',
+                                  'to the developer, feel free to join the support server: https://discord.gg/Vgk8Nve',
                             inline=False)
             embed.add_field(name='🔹 **Github**',
                             value='The full python source code is on my Github: https://github.com/matnad/pollmaster',

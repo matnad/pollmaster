@@ -254,7 +254,7 @@ class Poll:
         except InputError:
             pass
 
-        text = ("This poll will we created inactive. You can either schedule activation at a certain date or activate "
+        text = ("This poll will be created inactive. You can either schedule activation at a certain date or activate "
                 "it manually. **Type `0` to activate it manually or tell me when you want to activate it** by "
                 "typing an absolute or relative date. You can specify a timezone if you want.\n"
                 "Examples: `in 2 days`, `next week CET`, `may 3rd 2019`, `9.11.2019 9pm EST` ")
@@ -419,7 +419,7 @@ class Poll:
             elif number == 3:
                 return ['😍', '👍', '🤐', '👎', '🤢']
             elif number == 4:
-                return ['in favour', 'against', 'abstain']
+                return ['in favour', 'against', 'abstaining']
 
 
         try:
