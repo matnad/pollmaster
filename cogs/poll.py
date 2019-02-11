@@ -20,7 +20,7 @@ from essentials.settings import SETTINGS
 logger = logging.getLogger('bot')
 
 ## Helvetica is the closest font to Whitney (discord uses Whitney) in afm
-## This is used to estimate text width and adjust the layout of the embeds'''
+## This is used to estimate text width and adjust the layout of the embeds
 afm_fname = os.path.join(rcParams['datapath'], 'fonts', 'afm', 'phvr8a.afm')
 with open(afm_fname, 'rb') as fh:
     afm = AFM(fh)
@@ -158,9 +158,7 @@ class Poll:
         except InputError:
             pass
 
-        text = ("I will guide you step by step through the creation of your new poll."
-                "We can do this in a text channel or you can PM me to keep the server clean.\n"
-                "**How would you like your poll to be called?**\n"
+        text = ("**What is the question of your poll?**\n"
                 "Try to be descriptive without writing more than one sentence.")
         message = await self.wizard_says(text)
 
