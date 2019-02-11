@@ -45,6 +45,7 @@ extensions = ['cogs.config','cogs.poll_controls', 'cogs.help', 'cogs.db_api']
 for ext in extensions:
     bot.load_extension(ext)
 
+
 @bot.event
 async def on_ready():
     bot.owner = await bot.get_user_info(str(SETTINGS.owner_id))
@@ -54,6 +55,16 @@ async def on_ready():
     bot.session = aiohttp.ClientSession()
     print(bot.db)
     await bot.change_presence(game=discord.Game(name=f'pm!help'))
+
+    # check discord server configs
+    db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
+    for server in bot.servers:
+        if server.id not in db_server_ids:
+            await bot.db.config.update_one(
+                {'_id': str(server.id)},
+                {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
+                upsert=True
+            )
 
 
 @bot.event
@@ -86,14 +97,18 @@ async def on_command_error(e, ctx):
                             f"\n\tAuthor: <@{ctx.message.author.id}>",
                 timestamp=ctx.message.timestamp
             )
-            await bot.send_message(bot.owner,embed=e)
+            await bot.send_message(bot.owner, embed=e)
+
 
 @bot.event
 async def on_server_join(server):
     result = await bot.db.config.find_one({'_id': str(server.id)})
     if result is None:
-        await bot.db.config.update_one({'_id': str(server.id)},
-                                       {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
-                                       upsert=True)
+        await bot.db.config.update_one(
+            {'_id': str(server.id)},
+            {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
+            upsert=True
+        )
 
-bot.run(SETTINGS.bot_token)
+
+bot.run(SETTINGS.bot_token, reconnect=True)

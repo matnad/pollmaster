@@ -35,7 +35,8 @@ class Help:
             await self.bot.delete_message(msg)
             return None
         else:
-            await self.bot.remove_reaction(res.reaction.message, res.reaction.emoji, res.user)
+            if str(res.reaction.message.channel.type) != 'private':
+                await self.bot.remove_reaction(res.reaction.message, res.reaction.emoji, res.user)
             return res
 
     def get_help_embed(self, page, pre):
@@ -90,19 +91,19 @@ class Help:
                                   'type the command or type the command followed by the question to skip that first step.'
                                   'Your Members need the <admin> or <user> role to use these commands. More in 🛠 Configuration.',
                             inline=False)
-            embed.add_field(name='🔹 **Quick Poll:** `!quick <poll question>` (optional)',
+            embed.add_field(name=f'🔹 **Quick Poll:** `{pre}quick <poll question>` (optional)',
                             value='If you just need a quick poll, this is the way to go. All you have to specify is the '
                                   'question and your answers; the rest will be set to default values.',
                             inline=False)
-            embed.add_field(name='🔹 **All Features:** `!new <poll question>` (optional)',
+            embed.add_field(name=f'🔹 **All Features:** `{pre}new <poll question>` (optional)',
                             value='This command gives you full control over your poll. A step by step wizard will guide '
                                   'you through the process and you can specify options such as Multiple Choice, '
                                   'Anonymous Voting, Role Restriction, Role Weights and Deadline.',
                             inline=False)
-            embed.add_field(name='🔹 **Prepare and Schedule:** `!prepare <poll question>` (optional)',
-                            value='Similar to `!new`, this gives you all the options. But additionally, the poll will '
+            embed.add_field(name=f'🔹 **Prepare and Schedule:** `{pre}prepare <poll question>` (optional)',
+                            value=f'Similar to `{pre}new`, this gives you all the options. But additionally, the poll will '
                                   'be set to \'inactive\'. You can specify if the poll should activate at a certain time '
-                                  'and/or if you would like to manually `!activate` it. '
+                                  f'and/or if you would like to manually `{pre}activate` it. '
                                   'Perfect if you are preparing for a team meeting!',
                             inline=False)
         elif page == '🔍':
@@ -110,13 +111,13 @@ class Help:
                             value='All users can display and list polls, with the exception of prepared polls. '
                                   'Voting is done simply by using the reactions below the poll.',
                             inline=False)
-            embed.add_field(name='🔹 **Show a Poll:** `!show <poll_label>`',
+            embed.add_field(name=f'🔹 **Show a Poll:** `{pre}show <poll_label>`',
                             value='This command will refresh and display a poll. The votes in the message will always '
                                   'be up to date and accurate. The number of reactions can be different for a number '
                                   'of reasons and you can safely disregard them.',
                             inline=False)
-            embed.add_field(name='🔹 **List Polls:** `!show <> | open | closed | prepared`',
-                            value='If you just type `!show` without an argument it will default to `!show open`.'
+            embed.add_field(name=f'🔹 **List Polls:** `{pre}show <> | open | closed | prepared`',
+                            value=f'If you just type `{pre}show` without an argument it will default to `{pre}show open`.'
                                   'These commands will print a list of open, closed or prepared polls that exist on '
                                   'the server. The first word in bold is the label of the poll and after the colon, '
                                   'you can read the question. These lists are paginated and you can use the arrow '
@@ -127,24 +128,24 @@ class Help:
                             value='All these commands can only be used by an <admin> or by the author of the poll. '
                                   'Go to 🛠 Configuration for more info on the permissions.',
                             inline=False)
-            embed.add_field(name='🔹 **Close** `!close <poll_label>`',
+            embed.add_field(name=f'🔹 **Close** `{pre}close <poll_label>`',
                             value='Polls will close automatically when their deadline is reached. But you can always '
                                   'close them manually by using this command. A closed poll will lock in the votes so '
                                   'users can no longer change, add or remove votes. Once closed, you can export a poll.',
                             inline=False)
-            embed.add_field(name='🔹 **Delete** `!delete <poll_label>`',
+            embed.add_field(name=f'🔹 **Delete** `{pre}delete <poll_label>`',
                             value='This will *permanently and irreversibly* delete a poll from the database. '
                                   'Once done, the label is freed up and can be assigned again.',
                             inline=False)
-            embed.add_field(name='🔹 **Export** `!export <poll_label>`',
+            embed.add_field(name=f'🔹 **Export** `{pre}export <poll_label>`',
                             value='You can use this command or react with 📎 to a closed poll to generate a report. '
                                   'The report will then be sent to you in discord via the bot. This utf8-textfile '
                                   '(make sure to open it in an utf8-ready editor) will contain all the infos about the '
                                   'poll, including a detailed list of participants and their votes (just a list of names '
                                   'for anonymous polls).',
                             inline=False)
-            embed.add_field(name='🔹 **Activate** `!activate <poll_label>`',
-                            value='To see how you can prepare inactive polls read the `!prepare` command under Making '
+            embed.add_field(name=f'🔹 **Activate** `{pre}activate <poll_label>`',
+                            value=f'To see how you can prepare inactive polls read the `{pre}prepare` command under Making '
                                   'New Polls. This command is used to manually activate a prepared poll.',
                             inline=False)
 
@@ -152,17 +153,17 @@ class Help:
             embed.add_field(name='🛠 Configuration',
                             value='To run any of these commands you need the **\"Manage Server\"** permisson.',
                             inline=False)
-            embed.add_field(name='🔹 **Poll Admins** `!adminrole <role name> (optional)`',
+            embed.add_field(name=f'🔹 **Poll Admins** `{pre}adminrole <role name> (optional)`',
                             value='This gives the rights to create polls and to control ALL polls on the server. '
-                                  'To see the current role for poll admin, run the command without an argument: `!adminrole`\n'
+                                  f'To see the current role for poll admin, run the command without an argument: `{pre}adminrole`\n'
                                   'If you want to change the admin role to any other role, use the name of the new role '
-                                  'as the argument: !adminrole moderators',
+                                  f'as the argument: `{pre}adminrole moderators`',
                             inline=False)
-            embed.add_field(name='🔹 **Poll Users** `!userrole <role name> (optional)`',
+            embed.add_field(name=f'🔹 **Poll Users** `{pre}userrole <role name> (optional)`',
                             value='Everything here is identical to the admin role, except that Poll Users can only '
                                   'control the polls which were created by themselves.',
                             inline=False)
-            embed.add_field(name='🔹 **Change Prefix** `!prefix <new_prefix>`',
+            embed.add_field(name=f'🔹 **Change Prefix** `{pre}prefix <new_prefix>`',
                             value='This will change the bot prefix for your server. If you want to use a trailing '
                                   'whitespace, use "\w" instead of " " (discord deletes trailing whitespaces).',
                             inline=False)

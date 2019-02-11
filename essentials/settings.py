@@ -6,9 +6,9 @@ from essentials.secrets import SECRETS
 class Settings:
     def __init__(self):
         self.color = discord.Colour(int('7289da', 16))
-        self.title_icon = "http://mnadler.ch/img/donat-chart-32.png"
-        self.author_icon = "http://mnadler.ch/img/donat-chart-32.png"
-        self.report_icon = "http://mnadler.ch/img/poll-topic-64.png"
+        self.title_icon = "http://mnadler.ch/img/tag.png"
+        self.author_icon = "http://mnadler.ch/img/tag.jpg"
+        self.report_icon = "http://mnadler.ch/img/report.png"
         self.owner_id = 117687652278468610
         self.msg_errors = False
         self.log_errors = True

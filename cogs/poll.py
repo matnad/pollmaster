@@ -662,8 +662,7 @@ class Poll:
             if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
                 dt = dt.astimezone(pytz.utc)
 
-            now = datetime.datetime.utcnow().astimezone(pytz.utc)
-
+            now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
             if dt < now:
                 raise DateOutOfRange(dt)
             return dt

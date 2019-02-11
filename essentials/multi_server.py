@@ -7,7 +7,7 @@ async def get_pre(bot, message):
     if str(message.channel.type) == 'private':
         shared_server_list = await get_servers(bot, message)
         if shared_server_list.__len__() == 0:
-            return '!'
+            return 'pm!!'
         elif shared_server_list.__len__() == 1:
             return await get_server_pre(bot, shared_server_list[0])
         else:
@@ -22,9 +22,9 @@ async def get_server_pre(bot, server):
     try:
         result = await bot.db.config.find_one({'_id': str(server.id)})
     except AttributeError:
-        return '!'
+        return 'pm!'
     if not result or not result.get('prefix'):
-        return '!'
+        return 'pm!!'
     return result.get('prefix')
 
 

@@ -20,6 +20,8 @@ class PollControls:
         member = server.get_member(ctx.message.author.id)
         if member.id == owner_id:
             return True
+        elif member.server_permissions.manage_server:
+            return True
         else:
             result = await self.bot.db.config.find_one({'_id': str(server.id)})
             if result and result.get('admin_role') in [r.name for r in member.roles]:
@@ -315,12 +317,17 @@ class PollControls:
 
         # Permission Check
         member = server.get_member(ctx.message.author.id)
-        result = await self.bot.db.config.find_one({'_id': str(server.id)})
-        if result and result.get('admin_role') not in [r.name for r in member.roles] and result.get(
-                'user_role') not in [r.name for r in member.roles]:
-            await self.bot.send_message(ctx.message.author,
-                                        'You don\'t have sufficient rights to start new polls on this server. Please talk to the server admin.')
-            return
+        if not member.server_permissions.manage_server:
+            result = await self.bot.db.config.find_one({'_id': str(server.id)})
+            if result and result.get('admin_role') not in [r.name for r in member.roles] and result.get(
+                    'user_role') not in [r.name for r in member.roles]:
+                pre = await get_server_pre(self.bot, server)
+                await self.bot.send_message(ctx.message.author,
+                                            'You don\'t have sufficient rights to start new polls on this server. '
+                                            'A server administrator has to assign the user or admin role to you. '
+                                            f'To view and set the permissions, an admin can use `{pre}userrole` and '
+                                            f'`{pre}adminrole`')
+                return
 
         ## Create object
         poll = Poll(self.bot, ctx, server, channel)
@@ -339,9 +346,11 @@ class PollControls:
     # BOT EVENTS (@bot.event)
     async def on_reaction_add(self, reaction, user):
         if user != self.bot.user:
-
-            if reaction.emoji.startswith(('⏪', '⏩')):
-                return
+            try:
+                if reaction.emoji.startswith(('⏪', '⏩')):
+                    return
+            except:
+                print("fail emoji",reaction.emoji)
 
             # only look at our polls
             try:
