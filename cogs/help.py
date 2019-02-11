@@ -41,44 +41,46 @@ class Help:
 
     def get_help_embed(self, page, pre):
 
-        title = f' Pollmaster Help - React with an emoji to learn more about this topic!'
+        title = f' Pollmaster Help - React with an emoji to learn more about a topic!'
         embed = discord.Embed(title='', description='', colour=SETTINGS.color)
-        embed.set_author(name=title, icon_url=SETTINGS.title_icon)
+        embed.set_author(name=title, icon_url=SETTINGS.author_icon)
         embed.set_footer(text='Use reactions to navigate the help. This message will self-destruct in 3 minutes.')
 
         if page == '🏠':
             ## POLL CREATION SHORT
             embed.add_field(name='🆕 Making New Polls',
-                            value='There are 3 ways to create a new poll.', inline=False)
-            embed.add_field(name='Commands', value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
-            embed.add_field(name='Arguments', value=f'Arguments: `<poll question>` (optional)', inline=False)
-            embed.add_field(name='Examples', value=f'Examples: `{pre}new` | `{pre}quick What is the greenest color?`',
-                            inline=False)
+                            value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
+            # embed.add_field(name='Commands', value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
+            # embed.add_field(name='Arguments', value=f'Arguments: `<poll question>` (optional)', inline=False)
+            # embed.add_field(name='Examples', value=f'Examples: `{pre}new` | `{pre}quick What is the greenest color?`',
+            #                 inline=False)
 
             ## POLL CONTROLS
             embed.add_field(name='🔍 Show Polls',
-                            value='Commands to list and display polls.', inline=False)
-            embed.add_field(name='Command', value=f'`{pre}show`', inline=False)
-            embed.add_field(name='Arguments', value=f'Arguments: `open` (default) | `closed` | `prepared` | '
-                                                    f'`<poll_label>` (optional)', inline=False)
-            embed.add_field(name='Examples', value=f'Examples: `{pre}show` | `{pre}show closed` | `{pre}show mascot`',
-                            inline=False)
+                            value=f'`{pre}show (label)`', inline=False)
+            # embed.add_field(name='Command', value=f'`{pre}show (label)`', inline=False)
+            # embed.add_field(name='Arguments', value=f'Arguments: `open` (default) | `closed` | `prepared` | '
+            #                                         f'`<poll_label>` (optional)', inline=False)
+            # embed.add_field(name='Examples', value=f'Examples: `{pre}show` | `{pre}show closed` | `{pre}show mascot`',
+            #                 inline=False)
 
             ## POLL CONTROLS
             embed.add_field(name='🕹 Poll Controls',
-                            value='You can use these commands to interact with polls.', inline=False)
-            embed.add_field(name='Commands', value=f'`{pre}close` | `{pre}export` | `{pre}delete` | `{pre}activate` ',
-                            inline=False)
-            embed.add_field(name='Arguments', value=f'Arguments: <poll_label> (required)', inline=False)
-            embed.add_field(name='Examples', value=f'Examples: `{pre}close mascot` | `{pre}export proposal`',
-                            inline=False)
+                            value=f'`{pre}close` | `{pre}export` | `{pre}delete` | `{pre}activate` ', inline=False)
+            # embed.add_field(name='Commands', value=f'`{pre}close` | `{pre}export` | `{pre}delete` | `{pre}activate` ',
+            #                 inline=False)
+            # embed.add_field(name='Arguments', value=f'Arguments: <poll_label> (required)', inline=False)
+            # embed.add_field(name='Examples', value=f'Examples: `{pre}close mascot` | `{pre}export proposal`',
+            #                 inline=False)
 
             ## POLL CONTROLS
             embed.add_field(name='🛠 Configuration',
-                            value='Various Commands to personalize Pollmaster for this server.', inline=False)
-            embed.add_field(name='Commands',
-                            value=f'`{pre}userrole <role>` | `{pre}adminrole <role>` | `{pre}prefix <new_prefix>` ',
-                            inline=False)
+                            value=f'`{pre}userrole (role)` | `{pre}adminrole (role)` | `{pre}prefix <new_prefix>` ',
+                            inline=False
+                            )
+            # embed.add_field(name='Commands',
+            #                 value=f'`{pre}userrole <role>` | `{pre}adminrole <role>` | `{pre}prefix <new_prefix>` ',
+            #                 inline=False)
 
             ## ABOUT
             embed.add_field(name='💖 About Pollmaster',
