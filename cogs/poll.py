@@ -705,10 +705,18 @@ class Poll:
 
 
     async def to_dict(self):
+        if self.channel is None:
+            cid = 0
+        else:
+            cid = self.channel.id
+        if self.author is None:
+            aid = 0
+        else:
+            aid = self.author.id
         return {
             'server_id': str(self.server.id),
-            'channel_id': str(self.channel.id),
-            'author': str(self.author.id),
+            'channel_id': str(cid),
+            'author': str(aid),
             'name': self.name,
             'short': self.short,
             'anonymous': self.anonymous,
@@ -827,9 +835,9 @@ class Poll:
             return None
 
     async def from_dict(self, d):
-        self.server = self.bot.get_server(d['server_id'])
-        self.channel = self.bot.get_channel(d['channel_id'])
-        self.author = await self.bot.get_user_info(d['author'])
+        self.server = self.bot.get_server(str(d['server_id']))
+        self.channel = self.bot.get_channel(str(d['channel_id']))
+        self.author = await self.bot.get_user_info(str(d['author']))
         self.name = d['name']
         self.short = d['short']
         self.anonymous = d['anonymous']

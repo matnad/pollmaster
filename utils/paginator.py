@@ -39,6 +39,6 @@ async def embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_pre
     if res is None:
         return
     elif res.reaction.emoji == '⏪' and start > 0:
-        await embed_list_paginated(bot, pre, items, item_fct, base_embed, msg=msg, start=start-per_page, per_page=per_page)
+        await embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_prefix=footer_prefix, msg=msg, start=start-per_page, per_page=per_page)
     elif res.reaction.emoji == '⏩' and items.__len__() > start+per_page:
-        await embed_list_paginated(bot, pre, items, item_fct, base_embed, msg=msg, start=start+per_page, per_page=per_page)
+        await embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_prefix=footer_prefix, msg=msg, start=start+per_page, per_page=per_page)

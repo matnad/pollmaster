@@ -1,16 +1,15 @@
-import datetime
-import os
 import traceback
 import logging
 import aiohttp
 import discord
+
 
 from discord.ext import commands
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from essentials.multi_server import get_pre
 from essentials.settings import SETTINGS
-
+from utils.import_old_database import import_old_database
 
 bot_config = {
     'command_prefix': get_pre,
@@ -60,11 +59,28 @@ async def on_ready():
     db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
     for server in bot.servers:
         if server.id not in db_server_ids:
+
+            # create new config entry
             await bot.db.config.update_one(
                 {'_id': str(server.id)},
                 {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
                 upsert=True
             )
+
+            #await import_old_database(bot, server)
+            # text = 'Test Update Notice. Please Ignore.'
+            text = "Dear Server Admin!\n" \
+                   "After more than a year in the field, today Pollmaster received it's first big update and I am excited to present you the new Version!\n" \
+                   "**TL;DR** A massive overhaul of every function. The new (now customizable) prefix is pm! and you can find the rest of commands with pm!help\n\n" \
+                   "Here are some more highlights:\n" \
+                   "🔹 Voting is no longer done per text, but by using reactions\n" \
+                   "🔹 Creating new polls is now an interactive process instead of command lines\n" \
+                   "🔹 There is now a settings for multiple choice polls\n" \
+                   "🔹 You can use all the commands in a private message with Pollmaster to reduce spam in your channels\n\n" \
+                   "For the full changelog, please visit: "
+            # embed = discord.Embed(title="Pollmaster updated to version 2!", description=text, color=SETTINGS.color)
+            # await bot.send_message(server.owner, embed= embed)
+
 
 
 @bot.event
@@ -87,6 +103,7 @@ async def on_command_error(e, ctx):
 
         # log error
         logger.error(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
+        # raise(e)
 
         if SETTINGS.msg_errors:
             # send discord message for unexpected errors

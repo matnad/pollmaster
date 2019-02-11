@@ -215,7 +215,8 @@ class PollControls:
                 query = self.bot.db.polls.find({'server_id': str(server.id), 'active': False})
 
             if query is not None:
-                polls = [poll async for poll in query]
+                # sort by newest first
+                polls = [poll async for poll in query.sort('_id', -1)]
             else:
                 return
 
@@ -228,9 +229,9 @@ class PollControls:
             # await self.bot.say(embed=await self.embed_list_paginated(polls, item_fct, embed))
             # msg = await self.embed_list_paginated(ctx, polls, item_fct, embed, per_page=8)
             pre = await get_server_pre(self.bot, server)
-            footer_text = ''  # f'type {pre}show <label> to display a poll.
+            footer_text = f'type {pre}show <label> to display a poll. '
             msg = await embed_list_paginated(self.bot, pre, polls, item_fct, embed, footer_prefix=footer_text,
-                                             per_page=8)
+                                             per_page=10)
         else:
             p = await Poll.load_from_db(self.bot, str(server.id), short)
             if p is not None:
@@ -347,10 +348,10 @@ class PollControls:
     async def on_reaction_add(self, reaction, user):
         if user != self.bot.user:
             try:
-                if reaction.emoji.startswith(('⏪', '⏩')):
+                if isinstance(reaction.emoji, str) and reaction.emoji.startswith(('⏪', '⏩')):
                     return
             except:
-                print("fail emoji",reaction.emoji)
+                logger.warning("fail emoji "+str(reaction.emoji))
 
             # only look at our polls
             try:
