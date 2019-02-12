@@ -1,4 +1,5 @@
 import copy
+import json
 import logging
 import discord
 
@@ -91,7 +92,7 @@ class PollControls:
             return
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.server)
-            error = f'Please specify the label of a poll after the close command. \n' \
+            error = f'Please specify the label of a poll after the delete command. \n' \
                     f'`{pre}close <poll_label>`'
             await self.say_error(ctx, error)
         else:
@@ -341,99 +342,146 @@ class PollControls:
         return poll
 
     # BOT EVENTS (@bot.event)
-    async def on_reaction_add(self, reaction, user):
-        if user != self.bot.user:
-            try:
-                if isinstance(reaction.emoji, str) and reaction.emoji.startswith(('⏪', '⏩')):
-                    return
-            except:
-                logger.warning("fail emoji "+str(reaction.emoji))
+    async def on_socket_raw_receive(self, raw_msg):
+        if not isinstance(raw_msg, str):
+            return
+        msg = json.loads(raw_msg)
+        type = msg.get("t")
+        data = msg.get("d")
+        if not data:
+            return
+        emoji = data.get("emoji")
+        user_id = data.get("user_id")
+        message_id = data.get("message_id")
+        if type == "MESSAGE_REACTION_ADD":
+            await self.do_on_reaction_add(data)
+        elif type == "MESSAGE_REACTION_REMOVE":
+            await self.do_on_reaction_remove(data)
 
-            # only look at our polls
-            try:
-                short = reaction.message.embeds[0]['author']['name'][3:]
-                if not reaction.message.embeds[0]['author']['name'].startswith('>> ') or not short:
-                    return
-            except IndexError:
-                return
-
-            # create message object for the reaction
-            user_msg = copy.deepcopy(reaction.message)
-            user_msg.author = user
-
-            server = await ask_for_server(self.bot, user_msg, short)
-            if str(user_msg.channel.type) == 'private':
-                user = server.get_member(user.id)
-                user_msg.author = user
-
-            # fetch poll
-            p = await Poll.load_from_db(self.bot, server.id, short)
-            if p is None:
-                return
-
-            # export
-            if (reaction.emoji == '📎'):
-                # sending file
-                file = await p.export()
-                if file is not None:
-                    await self.bot.send_file(
-                        user,
-                        file,
-                        content='Sending you the requested export of "{}".'.format(p.short)
-                    )
-                return
-
-            # no rights, terminate function
-            if not await p.has_required_role(user):
-                await self.bot.remove_reaction(reaction.message, reaction.emoji, user)
-                await self.bot.send_message(user, f'You are not allowed to vote in this poll. Only users with '
-                                                  f'at least one of these roles can vote:\n{", ".join(p.roles)}')
-                return
-
-            # order here is crucial since we can't determine if a reaction was removed by the bot or user
-            # update database with vote
-            await p.vote(user, reaction.emoji, reaction.message)
-
-            # check if we need to remove reactions (this will trigger on_reaction_remove)
-            if str(reaction.message.channel.type) != 'private':
-                if p.anonymous:
-                    # immediately remove reaction
-                    await self.bot.remove_reaction(reaction.message, reaction.emoji, user)
-                elif not p.multiple_choice:
-                    # remove all other reactions
-                    for r in reaction.message.reactions:
-                        if r != reaction:
-                            await self.bot.remove_reaction(reaction.message, r.emoji, user)
-
-    async def on_reaction_remove(self, reaction, user):
-        if reaction.emoji.startswith(('⏪', '⏩')):
+    async def do_on_reaction_remove(self, data):
+        # get emoji symbol
+        emoji = data.get('emoji')
+        if emoji:
+            emoji = emoji.get('name')
+        if not emoji:
             return
 
-        # only look at our polls
-        try:
-            short = reaction.message.embeds[0]['author']['name'][3:]
-            if not reaction.message.embeds[0]['author']['name'].startswith('>> ') or not short:
-                return
-        except IndexError:
+        # check if we can find a poll label
+        message_id = data.get('message_id')
+        channel_id = data.get('channel_id')
+        user_id = data.get('user_id')
+        channel = self.bot.get_channel(channel_id)
+        user = await self.bot.get_user_info(user_id)  # only do this once
+        if not channel:
+            # discord rapidly closes dm channels by desing
+            # put private channels back into the bots cache and try again
+            await self.bot.start_private_message(user)
+            channel = self.bot.get_channel(channel_id)
+        message = await self.bot.get_message(channel=channel, id=message_id)
+        label = None
+        if message and message.embeds:
+            embed = message.embeds[0]
+            label_object = embed.get('author')
+            if label_object:
+                label_full = label_object.get('name')
+                if label_full and label_full.startswith('>> '):
+                    label = label_full[3:]
+        if not label:
             return
-
-        # create message object for the reaction
-        user_msg = copy.deepcopy(reaction.message)
-        user_msg.author = user
-
-        server = await ask_for_server(self.bot, user_msg, short)
-        if str(user_msg.channel.type) == 'private':
-            user = server.get_member(user.id)
-            user_msg.author = user
 
         # fetch poll
-        p = await Poll.load_from_db(self.bot, server.id, short)
-        if p is None:
+        # create message object for the reaction sender, to get correct server
+        user_msg = copy.deepcopy(message)
+        user_msg.author = user
+        server = await ask_for_server(self.bot, user_msg, label)
+        p = await Poll.load_from_db(self.bot, server.id, label)
+        if not isinstance(p, Poll):
             return
+
         if not p.anonymous:
             # for anonymous polls we can't unvote because we need to hide reactions
-            await p.unvote(user, reaction.emoji, reaction.message)
+            member = server.get_member(user_id)
+            await p.unvote(member, emoji, message)
 
+
+    async def do_on_reaction_add(self, data):
+        # dont look at bot's own reactions
+        user_id = data.get('user_id')
+        if user_id == self.bot.user.id:
+            return
+
+        # get emoji symbol
+        emoji = data.get('emoji')
+        if emoji:
+            emoji = emoji.get('name')
+        if not emoji:
+            return
+
+        # check if we can find a poll label
+        message_id = data.get('message_id')
+        channel_id = data.get('channel_id')
+        channel = self.bot.get_channel(channel_id)
+        user = await self.bot.get_user_info(user_id)  # only do this once
+        if not channel:
+            # discord rapidly closes dm channels by desing
+            # put private channels back into the bots cache and try again
+            await self.bot.start_private_message(user)
+            channel = self.bot.get_channel(channel_id)
+        message = await self.bot.get_message(channel=channel, id=message_id)
+        label = None
+        if message and message.embeds:
+            embed = message.embeds[0]
+            label_object = embed.get('author')
+            if label_object:
+                label_full = label_object.get('name')
+                if label_full and label_full.startswith('>> '):
+                    label = label_full[3:]
+        if not label:
+            return
+
+        # fetch poll
+        # create message object for the reaction sender, to get correct server
+        user_msg = copy.deepcopy(message)
+        user_msg.author = user
+        server = await ask_for_server(self.bot, user_msg, label)
+        p = await Poll.load_from_db(self.bot, server.id, label)
+        if not isinstance(p, Poll):
+            return
+
+        # export
+        if emoji == '📎':
+            # sending file
+            file = await p.export()
+            if file is not None:
+                await self.bot.send_file(
+                    user,
+                    file,
+                    content='Sending you the requested export of "{}".'.format(p.short)
+                )
+            return
+
+        # no rights, terminate function
+        member = server.get_member(user_id)
+        if not await p.has_required_role(member):
+            await self.bot.remove_reaction(message, emoji, user)
+            await self.bot.send_message(user, f'You are not allowed to vote in this poll. Only users with '
+                                              f'at least one of these roles can vote:\n{", ".join(p.roles)}')
+            return
+
+        # order here is crucial since we can't determine if a reaction was removed by the bot or user
+        # update database with vote
+        await p.vote(member, emoji, message)
+        #
+        # check if we need to remove reactions (this will trigger on_reaction_remove)
+        if str(channel.type) != 'private':
+            if p.anonymous:
+                # immediately remove reaction and to be safe, remove all reactions
+                await self.bot.remove_reaction(message, emoji, user)
+            elif not p.multiple_choice:
+                # remove all other reactions
+                for r in message.reactions:
+                    if r.emoji and r.emoji != emoji:
+                        await self.bot.remove_reaction(message, r.emoji, user)
 
 def setup(bot):
     global logger

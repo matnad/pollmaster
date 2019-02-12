@@ -1090,6 +1090,10 @@ class Poll:
                 else:
                     if [choice] == self.votes[user.id]['choices']:
                         already_voted = True
+                        if self.anonymous:
+                            # undo anonymous vote
+                            await self.unvote(user, option, message)
+                            return
                     else:
                         self.votes[user.id]['choices'] = [choice]
         else:
@@ -1102,7 +1106,7 @@ class Poll:
         if not already_voted:
             # edit message if there is a real change
             await self.bot.edit_message(message, embed=await self.generate_embed())
-            pass
+
 
     async def unvote(self, user, option, message):
         if not await self.is_open():
