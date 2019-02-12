@@ -10,12 +10,13 @@ async def embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_pre
 
     # footer text
     #footer_text = f'Type {pre}show <label> to show a poll. '
+    footer_text = footer_prefix
     if start > 0:
-        footer_prefix += f'React with ⏪ to show the last {per_page} entries. '
+        footer_text += f'React with ⏪ to show the last {per_page} entries. '
     if items.__len__() > start+per_page:
-        footer_prefix += f'React with ⏩ to show the next {per_page} entries. '
-    if footer_prefix.__len__() > 0:
-        embed.set_footer(text=footer_prefix)
+        footer_text += f'React with ⏩ to show the next {per_page} entries. '
+    if footer_text.__len__() > 0:
+        embed.set_footer(text=footer_text)
 
     # post / edit message
     if msg is not None:

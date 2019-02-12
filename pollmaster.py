@@ -16,7 +16,7 @@ bot_config = {
     'status': discord.Status.online,
     'owner_id': SETTINGS.owner_id,
     'fetch_offline_members': False,
-    'max_messages': 200000
+    'max_messages': 15000
 }
 
 bot = commands.Bot(**bot_config)

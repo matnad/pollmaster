@@ -16,6 +16,7 @@ import discord
 from essentials.multi_server import get_pre
 from essentials.exceptions import *
 from essentials.settings import SETTINGS
+from utils.misc import possible_timezones
 
 logger = logging.getLogger('bot')
 
@@ -60,7 +61,7 @@ class Poll:
             self.weights_roles = []
             self.weights_numbers = []
             self.duration = 0
-            self.duration_tz = 'UTC'
+            self.duration_tz = 0.0
             self.time_created = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
 
             self.open = True
@@ -666,7 +667,10 @@ class Poll:
             return dt
 
         try:
-            self.duration = await get_valid(force)
+            dt = await get_valid(force)
+            self.duration = dt
+            if self.duration != 0:
+                self.duration_tz = dt.utcoffset().total_seconds() / 3600
             return
         except InputError:
             pass
@@ -688,7 +692,7 @@ class Poll:
                 if self.duration == 0:
                     await self.add_vaild(message, 'until closed manually')
                 else:
-                    self.duration_tz = dt.tzinfo.tzname(dt)
+                    self.duration_tz = dt.utcoffset().total_seconds() / 3600
                     await self.add_vaild(message, self.duration.strftime('%d-%b-%Y %H:%M %Z'))
                 break
             except InvalidInput:
@@ -1006,7 +1010,16 @@ class Poll:
             deadline = self.duration
             if deadline.tzinfo is None or deadline.tzinfo.utcoffset(deadline) is None:
                 deadline = pytz.utc.localize(deadline)
-            tz = pytz.timezone(self.duration_tz)
+            if isinstance(self.duration_tz, float):
+                tz = possible_timezones(self.duration_tz, common_only=True)
+                if not tz:
+                    tz = pytz.timezone('UTC')
+                else:
+                    # choose one valid timezone with the offset
+                    tz = pytz.timezone(tz[0])
+            else:
+                tz = pytz.timezone(self.duration_tz)
+
             deadline = deadline.astimezone(tz)
             if string:
                 return deadline.strftime('%d-%b-%Y %H:%M %Z')
