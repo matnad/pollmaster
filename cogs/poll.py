@@ -67,12 +67,12 @@ class Poll:
             self.open = True
             self.active = True
             self.activation = 0
-            self.activation_tz = 'UTC'
+            self.activation_tz = 0.0
             self.votes = {}
 
     async def is_open(self, update_db=True):
         if open and self.duration != 0 \
-                and datetime.datetime.utcnow().replace(tzinfo=pytz.utc) > self.duration.replace(tzinfo=pytz.utc):
+                and datetime.datetime.utcnow().replace(tzinfo=pytz.utc) > self.get_duration_with_tz():
             self.open = False
             if update_db:
                 await self.save_to_db()
@@ -80,7 +80,7 @@ class Poll:
 
     async def is_active(self, update_db=True):
         if not self.active and self.activation != 0 \
-                and datetime.datetime.utcnow().replace(tzinfo=pytz.utc) > self.activation.replace(tzinfo=pytz.utc):
+                and datetime.datetime.utcnow().replace(tzinfo=pytz.utc) > self.get_activation_with_tz():
             self.active = True
             if update_db:
                 await self.save_to_db()
@@ -249,7 +249,7 @@ class Poll:
             dt = await get_valid(force)
             self.activation = dt
             if self.activation != 0:
-                self.activation_tz = dt.tzinfo.tzname(dt)
+                self.activation_tz = dt.utcoffset().total_seconds() / 3600
             self.active = False
             return
         except InputError:
@@ -269,7 +269,7 @@ class Poll:
                 if self.activation == 0:
                     await self.add_vaild(message, 'manually activated')
                 else:
-                    self.activation_tz = dt.tzinfo.tzname(dt)
+                    self.activation_tz = dt.utcoffset().total_seconds() / 3600
                     await self.add_vaild(message, self.activation.strftime('%d-%b-%Y %H:%M %Z'))
                 self.active = False
                 break
@@ -1000,16 +1000,13 @@ class Poll:
     #     else:
     #         return self.options_traditional
 
-    async def get_deadline(self, string=False):
+    def get_duration_with_tz(self):
         if self.duration == 0:
-            if string:
-                return 'No deadline'
-            else:
-                return 0
-        else:
-            deadline = self.duration
-            if deadline.tzinfo is None or deadline.tzinfo.utcoffset(deadline) is None:
-                deadline = pytz.utc.localize(deadline)
+            return 0
+        elif isinstance(self.duration, datetime.datetime):
+            dt = self.duration
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                dt = pytz.utc.localize(dt)
             if isinstance(self.duration_tz, float):
                 tz = possible_timezones(self.duration_tz, common_only=True)
                 if not tz:
@@ -1020,7 +1017,35 @@ class Poll:
             else:
                 tz = pytz.timezone(self.duration_tz)
 
-            deadline = deadline.astimezone(tz)
+            return dt.astimezone(tz)
+
+    def get_activation_with_tz(self):
+        if self.activation == 0:
+            return 0
+        elif isinstance(self.activation, datetime.datetime):
+            dt = self.activation
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                dt = pytz.utc.localize(dt)
+            if isinstance(self.activation_tz, float):
+                tz = possible_timezones(self.activation_tz, common_only=True)
+                if not tz:
+                    tz = pytz.timezone('UTC')
+                else:
+                    # choose one valid timezone with the offset
+                    tz = pytz.timezone(tz[0])
+            else:
+                tz = pytz.timezone(self.activation_tz)
+
+            return dt.astimezone(tz)
+
+    async def get_deadline(self, string=False):
+        if self.duration == 0:
+            if string:
+                return 'No deadline'
+            else:
+                return 0
+        else:
+            deadline = self.get_duration_with_tz()
             if string:
                 return deadline.strftime('%d-%b-%Y %H:%M %Z')
             else:
@@ -1033,11 +1058,7 @@ class Poll:
             else:
                 return 0
         else:
-            activation_date = self.activation
-            if activation_date.tzinfo is None or activation_date.tzinfo.utcoffset(activation_date) is None:
-                activation_date = pytz.utc.localize(activation_date)
-            tz = pytz.timezone(self.activation_tz)
-            activation_date = activation_date.astimezone(tz)
+            activation_date = self.get_activation_with_tz()
             if string:
                 return activation_date.strftime('%d-%b-%Y %H:%M %Z')
             else:
