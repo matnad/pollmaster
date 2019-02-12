@@ -47,4 +47,5 @@ Here is how Pollmaster looks in action:
 Join the support discord server by clicking the button on the top of the page.
 
 
+[![Discord Bots](https://discordbots.org/api/widget/444514223075360800.svg)](https://discordbots.org/bot/444514223075360800)
 
