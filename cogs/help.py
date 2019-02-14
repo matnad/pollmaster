@@ -49,7 +49,7 @@ class Help:
         if page == '🏠':
             ## POLL CREATION SHORT
             embed.add_field(name='🆕 Making New Polls',
-                            value=f'`{pre}quick` | `{pre}new` | `{pre}prepare`', inline=False)
+                            value=f'`{pre}quick` | `{pre}new` | `{pre}prepare` | `{pre}cmd <args>`', inline=False)
             # embed.add_field(name='Commands', value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
             # embed.add_field(name='Arguments', value=f'Arguments: `<poll question>` (optional)', inline=False)
             # embed.add_field(name='Examples', value=f'Examples: `{pre}new` | `{pre}quick What is the greenest color?`',
@@ -108,6 +108,14 @@ class Help:
                                   f'and/or if you would like to manually `{pre}activate` it. '
                                   'Perfect if you are preparing for a team meeting!',
                             inline=False)
+            embed.add_field(name=f'🔹 **-Advanced- Commandline:** `{pre}cmd <args>`',
+                            value=f'For the full syntax type `{pre}cmd help`\n'
+                                  f'Similar to version 1 of the bot, with this command you can create a poll in one message. '
+                                  f'Pass all the options you need via command line arguments, the rest will be set to '
+                                  f'default values. The wizard will step in for invalid arguments.\n'
+                                  f'Example: `{pre}cmd -q "Which colors?" -l colors -o "green, blue, red" -mc -a`',
+                            inline=False)
+
         elif page == '🔍':
             embed.add_field(name='🔍 Show Polls',
                             value='All users can display and list polls, with the exception of prepared polls. '

@@ -165,7 +165,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 self.name = await get_valid(reply)
                 await self.add_vaild(message, self.name)
                 break
@@ -203,7 +207,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 self.short = await get_valid(reply)
                 await self.add_vaild(message, self.short)
                 break
@@ -263,7 +271,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 dt = await get_valid(reply)
                 self.activation = dt
                 if self.activation == 0:
@@ -315,7 +327,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 self.anonymous = await get_valid(reply)
                 await self.add_vaild(message, f'{"Yes" if self.anonymous else "No"}')
                 break
@@ -382,7 +398,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 self.multiple_choice = await get_valid(reply)
                 await self.add_vaild(message, f'{"Yes" if self.multiple_choice else "No"}')
                 break
@@ -450,7 +470,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 options = await get_valid(reply)
                 self.options_reaction_default = False
                 if isinstance(options, int):
@@ -527,7 +551,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 self.roles = await get_valid(reply, roles)
                 await self.add_vaild(message, f'{", ".join(self.roles)}')
                 break
@@ -539,43 +567,6 @@ class Poll:
                 await self.add_error(message, '**Only type numbers you can see in the list.**')
             except InvalidRoles as e:
                 await self.add_error(message, f'**The following roles are invalid: {e.roles}**')
-
-    # async def set_options_traditional(self, force=None):
-    #     '''Currently not used as everything is reaction based'''
-    #     if force is not None:
-    #         self.options_traditional = force
-    #         return
-    #     if self.stopped: return
-    #     text = """**Next you chose from the possible set of options/answers for your poll.**
-    #     Type the corresponding number or type your own options, separated by commas.
-    #
-    #     **1** - yes, no
-    #     **2** - in favour, against, abstain
-    #     **3** - love it, like it, don't care, meh, hate it
-    #
-    #     If you write your own options they will be listed and can be voted for.
-    #     To use your custom options type them like this:
-    #     **apple juice, banana ice cream, kiwi slices**"""
-    #     message = await self.wizard_says(text)
-    #
-    #     reply = ''
-    #     while reply == '' or (reply.split(",").__len__() < 2 and reply not in ['1', '2', '3']) \
-    #             or (reply.split(",").__len__() > 99 and reply not in ['1', '2', '3']):
-    #         if reply != '':
-    #             await self.add_error(message,
-    #                                  '**Invalid entry. Type `1` `2` or `3` or a comma separated list (max. 99 options).**')
-    #         reply = await self.get_user_reply()
-    #         if self.stopped: break
-    #
-    #     if reply == '1':
-    #         self.options_traditional = ['yes, no']
-    #     elif reply == '2':
-    #         self.options_traditional = ['in favour', 'against', 'abstain']
-    #     elif reply == '3':
-    #         self.options_traditional = ['love it', 'like it', 'don\'t care', 'meh', 'hate it']
-    #     else:
-    #         self.options_traditional = [r.strip() for r in reply.split(",")]
-    #     return self.options_traditional
 
     async def set_weights(self, force=None):
         """Set role weights for the poll."""
@@ -623,7 +614,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 w_n = await get_valid(reply, self.server.roles)
                 self.weights_roles = w_n[0]
                 self.weights_numbers = w_n[1]
@@ -686,7 +681,11 @@ class Poll:
 
         while True:
             try:
-                reply = await self.get_user_reply()
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply()
                 dt = await get_valid(reply)
                 self.duration = dt
                 if self.duration == 0:
@@ -704,7 +703,6 @@ class Poll:
 
     def finalize(self):
         self.time_created = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
-
 
     async def to_dict(self):
         if self.channel is None:
@@ -965,7 +963,7 @@ class Poll:
         # else:
         #     embed = await self.add_field_custom(name='**Options**', value=', '.join(self.get_options()), embed=embed)
 
-        embed.set_footer(text='bot is in development')
+        # embed.set_footer(text='bot is in development')
 
         return embed
 
@@ -993,12 +991,6 @@ class Poll:
             await self.bot.add_reaction(msg, '📎')
         else:
             return msg
-
-    # def get_options(self):
-    #     if self.reaction:
-    #         return self.options_reaction
-    #     else:
-    #         return self.options_traditional
 
     def get_duration_with_tz(self):
         if self.duration == 0:
@@ -1076,7 +1068,6 @@ class Poll:
             return sum([self.votes[c]['weight'] for c in [u for u in self.votes] if option in self.votes[c]['choices']])
         else:
             return sum([1 for c in [u for u in self.votes] if option in self.votes[c]['choices']])
-
 
     async def vote(self, user, option, message):
         if not await self.is_open():
