@@ -266,11 +266,11 @@ class PollControls:
         parser.add_argument('-question', '-q')
         parser.add_argument('-label', '-l', default=str(await generate_word(self.bot, server.id)))
         parser.add_argument('-options', '-o')
+        parser.add_argument('-multiple_choice', '-mc', default='1')
         parser.add_argument('-roles', '-r', default='all')
         parser.add_argument('-weights', '-w', default='none')
         parser.add_argument('-duration', '-d', default='0')
         parser.add_argument('-anonymous', '-a', action="store_true")
-        parser.add_argument('-multiple_choice', '-mc', action="store_true")
 
         helpstring = parser.format_help()
         helpstring = helpstring.replace("pollmaster.py", f"{pre}cmd ")
@@ -296,8 +296,8 @@ class PollControls:
             await poll.set_name(force=args.question)
             await poll.set_short(force=args.label)
             await poll.set_anonymous(force=f'{"yes" if args.anonymous else "no"}')
-            await poll.set_multiple_choice(force=f'{"yes" if args.multiple_choice else "no"}')
             await poll.set_options_reaction(force=args.options)
+            await poll.set_multiple_choice(force=args.multiple_choice)
             await poll.set_roles(force=args.roles)
             await poll.set_weights(force=args.weights)
             await poll.set_duration(force=args.duration)
@@ -318,8 +318,8 @@ class PollControls:
             await poll.set_name(force=cmd)
             await poll.set_short(force=str(await generate_word(self.bot, server.id)))
             await poll.set_anonymous(force='no')
-            await poll.set_multiple_choice(force='no')
             await poll.set_options_reaction()
+            await poll.set_multiple_choice(force='1')
             await poll.set_roles(force='all')
             await poll.set_weights(force='none')
             await poll.set_duration(force='0')
@@ -340,11 +340,8 @@ class PollControls:
             await poll.set_short()
             await poll.set_preparation()
             await poll.set_anonymous()
+            await poll.set_options_reaction()
             await poll.set_multiple_choice()
-            if poll.reaction:
-                await poll.set_options_reaction()
-            else:
-                await poll.set_options_traditional()
             await poll.set_roles()
             await poll.set_weights()
             await poll.set_duration()
@@ -364,11 +361,8 @@ class PollControls:
             await poll.set_name(force=cmd)
             await poll.set_short()
             await poll.set_anonymous()
+            await poll.set_options_reaction()
             await poll.set_multiple_choice()
-            if poll.reaction:
-                await poll.set_options_reaction()
-            else:
-                await poll.set_options_traditional()
             await poll.set_roles()
             await poll.set_weights()
             await poll.set_duration()
@@ -547,7 +541,7 @@ class PollControls:
             if p.anonymous:
                 # immediately remove reaction and to be safe, remove all reactions
                 await self.bot.remove_reaction(message, emoji, user)
-            elif not p.multiple_choice:
+            elif p.multiple_choice == 1:
                 # remove all other reactions
                 for r in message.reactions:
                     if r.emoji and r.emoji != emoji:

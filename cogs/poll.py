@@ -52,7 +52,7 @@ class Poll:
             self.short = str(uuid4())[0:23]
             self.anonymous = False
             self.reaction = True
-            self.multiple_choice = False
+            self.multiple_choice = 1
             self.options_reaction = ['yes', 'no']
             self.options_reaction_default = False
             # self.options_traditional = []
@@ -369,15 +369,15 @@ class Poll:
         async def get_valid(in_reply):
             if not in_reply:
                 raise InvalidInput
-            is_true = ['yes', '1']
-            is_false = ['no', '0']
             in_reply = self.sanitize_string(in_reply)
             if not in_reply:
                 raise InvalidInput
-            elif in_reply.lower() in is_true:
-                return True
-            elif in_reply.lower() in is_false:
-                return False
+            elif not in_reply.isdigit():
+                raise ExpectedInteger
+            elif int(in_reply) > self.options_reaction.__len__():
+                raise OutOfRange
+            elif int(in_reply) <= self.options_reaction.__len__() >= 0:
+                return int(in_reply)
             else:
                 raise InvalidInput
 
@@ -387,13 +387,14 @@ class Poll:
         except InputError:
             pass
 
-        text = ("**Should users be able to vote for multiple options?**\n"
+        text = ("**How many options should the voters be able choose?**\n"
                 "\n"
-                "`0 - No`\n"
-                "`1  - Yes`\n"
+                "`0 - No Limit: Multiple Choice`\n"
+                "`1  - Single Choice`\n"
+                "`2+  - Specify exactly how many Choices`\n"
                 "\n"
-                "If you type `0` or `no`, a new vote will override the old vote. "
-                "Otherwise the users can vote for as many options as they like.")
+                "If the maximum choices are reached for a voter, they have to unvote an option before being able to "
+                "vote for a different one.")
         message = await self.wizard_says(text)
 
         while True:
@@ -404,10 +405,14 @@ class Poll:
                 else:
                     reply = await self.get_user_reply()
                 self.multiple_choice = await get_valid(reply)
-                await self.add_vaild(message, f'{"Yes" if self.multiple_choice else "No"}')
+                await self.add_vaild(message, f'{self.multiple_choice if self.multiple_choice > 0 else "No Limit"}')
                 break
             except InvalidInput:
-                await self.add_error(message, '**You can only answer with `yes` | `1` or `no` | `0`!**')
+                await self.add_error(message, '**Invalid Input**')
+            except ExpectedInteger:
+                await self.add_error(message, '**Enter a positive number**')
+            except OutOfRange:
+                await self.add_error(message, '**You can\'t have more choices than options.**')
 
 
     async def set_options_reaction(self, force=None):
@@ -842,7 +847,20 @@ class Poll:
         self.short = d['short']
         self.anonymous = d['anonymous']
         self.reaction = d['reaction']
-        self.multiple_choice = d['multiple_choice']
+
+        # backwards compatibility for multiple choice
+        if isinstance(d['multiple_choice'], bool):
+            if d['multiple_choice']:
+                self.multiple_choice = 0
+            else:
+                self.multiple_choice = 1
+        else:
+            try:
+                self.multiple_choice = int(d['multiple_choice'])
+            except ValueError:
+                logger.exception('Multiple Choice not an int or bool.')
+                self.multiple_choice = 0 # default
+
         self.options_reaction = d['options_reaction']
         self.options_reaction_default = d['reaction_default']
         # self.options_traditional = d['options_traditional']
@@ -936,8 +954,12 @@ class Poll:
             if self.options_reaction_default:
                 if await self.is_open():
                     text = f'**Score** '
-                    text += '*(Multiple Choice)*' if self.multiple_choice \
-                        else '*(Single Choice)*'
+                    if self.multiple_choice == 0:
+                        text += f'(Multiple Choice)'
+                    elif self.multiple_choice == 1:
+                        text += f'(Single Choice)'
+                    else:
+                        text += f'({self.multiple_choice} Choices)'
                 else:
                     text = f'**Final Score**'
 
@@ -949,10 +971,20 @@ class Poll:
                 embed.add_field(name='\u200b', value='\u200b', inline=False)
                 if await self.is_open():
                     text = f'*Vote by adding reactions to the poll*. '
-                    text += '*You can vote for multiple options.*' if self.multiple_choice \
-                        else '*You have 1 vote, but can change it.*'
+                    if self.multiple_choice == 0:
+                        text += '*You can vote for multiple options.*'
+                    elif self.multiple_choice == 1:
+                        text += '*You have 1 vote, but can change it.*'
+                    else:
+                        text += f'*You have {self.multiple_choice} choices and can change them.*'
                 else:
-                    text = f'*Final Results of the {"multiple choice" if self.multiple_choice else "single choice"} Poll.*'
+                    text = f'*Final Results of the Poll *'
+                    if self.multiple_choice == 0:
+                        text += '*(Multiple Choice).*'
+                    elif self.multiple_choice == 1:
+                        text += '*(Single Choice).*'
+                    else:
+                        text += f'*(With up to {self.multiple_choice} choices).*'
                 embed = await self.add_field_custom(name='**Options**', value=text, embed=embed)
                 for i, r in enumerate(self.options_reaction):
                     embed = await self.add_field_custom(
@@ -1079,7 +1111,7 @@ class Poll:
             return
 
         choice = 'invalid'
-        already_voted = False
+        refresh_poll = True
 
         # get weight
         weight = 1
@@ -1103,18 +1135,27 @@ class Poll:
                     choice = AZ_EMOJIS.index(option)
 
             if choice != 'invalid':
-                if self.multiple_choice:
-                    if choice in self.votes[user.id]['choices'] and self.anonymous:
-                        # anonymous multiple choice -> can't unreact so we toggle with react
-                        await self.unvote(user, option, message)
-                        return
-                    self.votes[user.id]['choices'].append(choice)
-                    # if len(self.votes[user.id]['choices']) > len(set(self.votes[user.id]['choices'])):
-                    #     already_voted = True
-                    self.votes[user.id]['choices'] = list(set(self.votes[user.id]['choices']))
+                if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
+                    if choice in self.votes[user.id]['choices']:
+                        if self.anonymous:
+                            # anonymous multiple choice -> can't unreact so we toggle with react
+                            await self.unvote(user, option, message)
+                            return
+                        refresh_poll = False
+                    else:
+                        if self.multiple_choice > 0 and self.votes[user.id]['choices'].__len__() >= self.multiple_choice:
+                            say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
+                                       f'Before you can vote again, you need to unvote one of your choices.'
+                            embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
+                            embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
+                            await self.bot.send_message(user, embed=embed)
+                            refresh_poll = False
+                        else:
+                            self.votes[user.id]['choices'].append(choice)
+                            self.votes[user.id]['choices'] = list(set(self.votes[user.id]['choices']))
                 else:
                     if [choice] == self.votes[user.id]['choices']:
-                        already_voted = True
+                        refresh_poll = False
                         if self.anonymous:
                             # undo anonymous vote
                             await self.unvote(user, option, message)
@@ -1128,7 +1169,7 @@ class Poll:
         await self.save_to_db()
 
         # refresh
-        if not already_voted:
+        if refresh_poll:
             # edit message if there is a real change
             await self.bot.edit_message(message, embed=await self.generate_embed())
 
@@ -1145,21 +1186,20 @@ class Poll:
         if str(user.id) not in self.votes: return
 
         choice = 'invalid'
-        if self.reaction:
-            if self.options_reaction_default:
-                if option in self.options_reaction:
-                    choice = self.options_reaction.index(option)
-            else:
-                if option in AZ_EMOJIS:
-                    choice = AZ_EMOJIS.index(option)
+        if self.options_reaction_default:
+            if option in self.options_reaction:
+                choice = self.options_reaction.index(option)
+        else:
+            if option in AZ_EMOJIS:
+                choice = AZ_EMOJIS.index(option)
 
-            if choice != 'invalid' and choice in self.votes[user.id]['choices']:
-                try:
-                    self.votes[user.id]['choices'].remove(choice)
-                    await self.save_to_db()
-                    await self.bot.edit_message(message, embed=await self.generate_embed())
-                except ValueError:
-                    pass
+        if choice != 'invalid' and choice in self.votes[user.id]['choices']:
+            try:
+                self.votes[user.id]['choices'].remove(choice)
+                await self.save_to_db()
+                await self.bot.edit_message(message, embed=await self.generate_embed())
+            except ValueError:
+                pass
 
     async def has_required_role(self, user):
         return not set([r.name for r in user.roles]).isdisjoint(self.roles)
