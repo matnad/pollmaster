@@ -103,7 +103,6 @@ async def on_command_error(e, ctx):
 
         # log error
         logger.error(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
-        raise e
 
         if SETTINGS.msg_errors:
             # send discord message for unexpected errors
