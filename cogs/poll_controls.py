@@ -1,10 +1,12 @@
 import argparse
 import copy
+import datetime
 import json
 import logging
 import shlex
 
 import discord
+import pytz
 
 from discord.ext import commands
 
@@ -269,7 +271,7 @@ class PollControls:
         parser.add_argument('-multiple_choice', '-mc', default='1')
         parser.add_argument('-roles', '-r', default='all')
         parser.add_argument('-weights', '-w', default='none')
-        parser.add_argument('-duration', '-d', default='0')
+        parser.add_argument('-deadline', '-d', default='0')
         parser.add_argument('-anonymous', '-a', action="store_true")
 
         helpstring = parser.format_help()
@@ -300,7 +302,7 @@ class PollControls:
             await poll.set_multiple_choice(force=args.multiple_choice)
             await poll.set_roles(force=args.roles)
             await poll.set_weights(force=args.weights)
-            await poll.set_duration(force=args.duration)
+            await poll.set_duration(force=args.deadline)
 
         poll = await self.wizard(ctx, route, server)
         if poll:
@@ -524,8 +526,67 @@ class PollControls:
                 )
             return
 
-        # no rights, terminate function
+        # info
         member = server.get_member(user_id)
+        if emoji == '❔':
+            is_open = await p.is_open()
+            embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
+                                  description='', color=SETTINGS.color)
+            embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
+
+            # vote rights
+            vote_rights = await p.has_required_role(member)
+            embed.add_field(name=f'{"Can you vote?" if is_open else "Could you vote?"}',
+                            value=f'{"✅" if vote_rights else "❎"}', inline=False)
+
+            # edit rights
+            edit_rights = False
+            if str(member.id) == str(p.author):
+                edit_rights = True
+            elif member.server_permissions.manage_server:
+                edit_rights = True
+            else:
+                result = await self.bot.db.config.find_one({'_id': str(server.id)})
+                if result and result.get('admin_role') in [r.name for r in member.roles]:
+                    edit_rights = True
+            embed.add_field(name='Can you manage the poll?', value=f'{"✅" if edit_rights else "❎"}', inline=False)
+
+            # choices
+            choices = 'You have not voted yet.' if vote_rights else 'You can\'t vote in this poll.'
+            if user.id in p.votes:
+                if p.votes[user.id]['choices'].__len__() > 0:
+                    choices = ', '.join([p.options_reaction[c] for c in p.votes[user.id]['choices']])
+            embed.add_field(name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
+                            value=choices, inline=False)
+
+            # weight
+            if vote_rights:
+                weight = 1
+                if p.weights_roles.__len__() > 0:
+                    valid_weights = [p.weights_numbers[p.weights_roles.index(r)] for r in
+                                     list(set([n.name for n in member.roles]).intersection(set(p.weights_roles)))]
+                    if valid_weights.__len__() > 0:
+                        weight = max(valid_weights)
+            else:
+                weight = 'You can\'t vote in this poll.'
+            embed.add_field(name='Weight of your votes:', value=weight, inline=False)
+
+            # time left
+            deadline = p.get_duration_with_tz()
+            if not is_open:
+                time_left = 'This poll is closed.'
+            elif deadline == 0:
+                time_left = 'Until manually closed.'
+            else:
+                time_left = str(deadline-datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
+
+            embed.add_field(name='Time left in the poll:', value=time_left, inline=False)
+
+            await self.bot.send_message(user, embed=embed)
+            return
+
+        # Assume: User wants to vote with reaction
+        # no rights, terminate function
         if not await p.has_required_role(member):
             await self.bot.remove_reaction(message, emoji, user)
             await self.bot.send_message(user, f'You are not allowed to vote in this poll. Only users with '

@@ -53,13 +53,7 @@ async def on_ready():
     bot.db = mongo.pollmaster
     bot.session = aiohttp.ClientSession()
     print(bot.db)
-    await bot.change_presence(game=discord.Game(name=f'V2 IS HERE >> pm!help'))
-
-    await bot.db.config.update_one(
-        {'_id': '261914618342014977'},
-        {'$set': {'prefix': 'd!'}},
-        upsert=True
-    )
+    await bot.change_presence(game=discord.Game(name=f'pm!help - v2.1 is live!'))
 
     # check discord server configs
     try:

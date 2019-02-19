@@ -467,7 +467,7 @@ class Poll:
                 "**1** - :white_check_mark: :negative_squared_cross_mark:\n"
                 "**2** - :thumbsup: :zipper_mouth: :thumbsdown:\n"
                 "**3** - :heart_eyes: :thumbsup: :zipper_mouth:  :thumbsdown: :nauseated_face:\n"
-                "**4** - in favour, against, abstain\n"
+                "**4** - in favour, against, abstaining\n"
                 "\n"
                 "Example for custom options:\n"
                 "**apple juice, banana ice cream, kiwi slices** ")
@@ -510,7 +510,7 @@ class Poll:
             if split.__len__() == 1 and split[0] in ['0', 'all', 'everyone']:
                 return ['@everyone']
 
-            if n_roles <= 20:
+            if n_roles <= 20 and force is None:
                 if not all([r.isdigit() for r in split]):
                     raise ExpectedInteger
                 elif any([int(r) > n_roles for r in split]):
@@ -1011,6 +1011,7 @@ class Poll:
                         msg,
                         r
                     )
+                await self.bot.add_reaction(msg, '❔')
                 return msg
             else:
                 for i, r in enumerate(self.options_reaction):
@@ -1018,8 +1019,10 @@ class Poll:
                         msg,
                         AZ_EMOJIS[i]
                     )
+                await self.bot.add_reaction(msg, '❔')
                 return msg
         elif not await self.is_open():
+            await self.bot.add_reaction(msg, '❔')
             await self.bot.add_reaction(msg, '📎')
         else:
             return msg

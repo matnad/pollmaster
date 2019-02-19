@@ -1,3 +1,10 @@
+# Changelog for Version 2.1
+
+## New features
+- React to a poll with ❔ to get personalised info
+- Added back the command line feature from version 1. Type *pm!cmd help* to get started
+- Multiple choice is no longer a flag, but a number of how many options each voter can choose 
+
 # Changelog for Version 2.0
 
 ## TL;DR
