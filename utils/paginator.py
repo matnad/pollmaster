@@ -4,8 +4,9 @@ async def embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_pre
     # generate list
     embed.title = f'{items.__len__()} entries'
     text = '\n'
-    for item in items[start:start+per_page]:
-        text += item_fct(item) + '\n'
+    for i,item in enumerate(items[start:start+per_page]):
+        j = i+start
+        text += item_fct(j,item) + '\n'
     embed.description = text
 
     # footer text
@@ -21,7 +22,8 @@ async def embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_pre
     # post / edit message
     if msg is not None:
         await bot.edit_message(msg, embed=embed)
-        await bot.clear_reactions(msg)
+        if str(msg.channel.type) != 'private':
+            await bot.clear_reactions(msg)
     else:
         msg = await bot.say(embed=embed)
 

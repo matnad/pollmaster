@@ -1,6 +1,10 @@
+import time
+
 import discord
 
 from essentials.settings import SETTINGS
+from utils.paginator import embed_list_paginated
+
 
 async def get_pre(bot, message):
     '''Gets the prefix for a message.'''
@@ -107,13 +111,22 @@ async def ask_for_channel(bot, server, message):
         return False
 
     # otherwise ask for a channel
-    text = 'Polls are bound to a specific channel on a server. Please select the channel for this poll by typing the corresponding number.\n'
     i = 1
+    text = 'Polls are bound to a specific channel on a server. Please select the channel for this poll by typing the corresponding number.\n'
     for name in [c.name for c in channel_list]:
-        text += f'\n**{i}** - {name}'
-        i += 1
+        to_add = f'\n**{i}** - {name}'
+
+        # check if length doesn't exceed allowed maximum or split it into multiple messages
+        if text.__len__() + to_add.__len__() > 2048:
+            embed = discord.Embed(title="Select a channel", description=text, color=SETTINGS.color)
+            await bot.say(embed=embed)
+            text = 'Polls are bound to a specific channel on a server. Please select the channel for this poll by typing the corresponding number.\n'
+        else:
+            text += to_add
+            i += 1
+
     embed = discord.Embed(title="Select a channel", description=text, color=SETTINGS.color)
-    server_msg = await bot.say(embed=embed)
+    await bot.say(embed=embed)
 
     valid_reply = False
     nr = 1

@@ -222,7 +222,7 @@ class PollControls:
             else:
                 return
 
-            def item_fct(item):
+            def item_fct(i,item):
                 return f':black_small_square: **{item["short"]}**: {item["name"]}'
 
             title = f' Listing {short} polls'

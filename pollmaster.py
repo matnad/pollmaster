@@ -55,6 +55,12 @@ async def on_ready():
     print(bot.db)
     await bot.change_presence(game=discord.Game(name=f'V2 IS HERE >> pm!help'))
 
+    await bot.db.config.update_one(
+        {'_id': '261914618342014977'},
+        {'$set': {'prefix': 'd!'}},
+        upsert=True
+    )
+
     # check discord server configs
     try:
         db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
@@ -97,6 +103,7 @@ async def on_command_error(e, ctx):
 
         # log error
         logger.error(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
+        raise e
 
         if SETTINGS.msg_errors:
             # send discord message for unexpected errors
