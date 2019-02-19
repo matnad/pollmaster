@@ -1,9 +1,16 @@
+import argparse
 import copy
+import datetime
 import json
 import logging
+import shlex
+
 import discord
+import pytz
 
 from discord.ext import commands
+
+from utils.misc import CustomFormatter
 from .poll import Poll
 from utils.paginator import embed_list_paginated
 from essentials.multi_server import get_server_pre, ask_for_server, ask_for_channel
@@ -34,14 +41,14 @@ class PollControls:
 
     async def say_error(self, ctx, error_text, footer_text=None):
         embed = discord.Embed(title='', description=error_text, colour=SETTINGS.color)
-        embed.set_author(name='Error', icon_url=SETTINGS.title_icon)
+        embed.set_author(name='Error', icon_url=SETTINGS.author_icon)
         if footer_text is not None:
             embed.set_footer(text=footer_text)
         await self.bot.say(embed=embed)
 
     async def say_embed(self, ctx, say_text='', title='Pollmaster', footer_text=None):
         embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
-        embed.set_author(name=title, icon_url=SETTINGS.title_icon)
+        embed.set_author(name=title, icon_url=SETTINGS.author_icon)
         if footer_text is not None:
             embed.set_footer(text=footer_text)
         await self.bot.say(embed=embed)
@@ -217,12 +224,12 @@ class PollControls:
             else:
                 return
 
-            def item_fct(item):
+            def item_fct(i,item):
                 return f':black_small_square: **{item["short"]}**: {item["name"]}'
 
             title = f' Listing {short} polls'
             embed = discord.Embed(title='', description='', colour=SETTINGS.color)
-            embed.set_author(name=title, icon_url=SETTINGS.title_icon)
+            embed.set_author(name=title, icon_url=SETTINGS.author_icon)
             # await self.bot.say(embed=await self.embed_list_paginated(polls, item_fct, embed))
             # msg = await self.embed_list_paginated(ctx, polls, item_fct, embed, per_page=8)
             pre = await get_server_pre(self.bot, server)
@@ -243,72 +250,131 @@ class PollControls:
                 await self.say_error(ctx, error, footer)
 
     @commands.command(pass_context=True)
+    async def cmd(self, ctx, *, cmd=None):
+        '''The old, command style way paired with the wizard.'''
+        server = await ask_for_server(self.bot, ctx.message)
+        if not server:
+            return
+        pre = await get_server_pre(self.bot, server)
+
+        # generate the argparser and handle invalid stuff
+        descr = 'Accept poll settings via commandstring. \n\n' \
+                '**Wrap all arguments in quotes like this:** \n' \
+                f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
+                'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
+                'If an argument is invalid, the wizard will step in. ' \
+                'If the command string is invalid, you will get this error :)'
+        parser = argparse.ArgumentParser(description=descr, formatter_class=CustomFormatter, add_help=False)
+        parser.add_argument('-question', '-q')
+        parser.add_argument('-label', '-l', default=str(await generate_word(self.bot, server.id)))
+        parser.add_argument('-options', '-o')
+        parser.add_argument('-multiple_choice', '-mc', default='1')
+        parser.add_argument('-roles', '-r', default='all')
+        parser.add_argument('-weights', '-w', default='none')
+        parser.add_argument('-deadline', '-d', default='0')
+        parser.add_argument('-anonymous', '-a', action="store_true")
+
+        helpstring = parser.format_help()
+        helpstring = helpstring.replace("pollmaster.py", f"{pre}cmd ")
+
+        if cmd and cmd == 'help':
+            await self.say_embed(ctx, say_text=helpstring)
+            return
+
+        try:
+            cmds = shlex.split(cmd)
+        except ValueError:
+            await self.say_error(ctx, error_text=helpstring)
+            return
+
+        try:
+            args = parser.parse_args(cmds)
+        except SystemExit:
+            await self.say_error(ctx, error_text=helpstring)
+            return
+
+        # pass arguments to the wizard
+        async def route(poll):
+            await poll.set_name(force=args.question)
+            await poll.set_short(force=args.label)
+            await poll.set_anonymous(force=f'{"yes" if args.anonymous else "no"}')
+            await poll.set_options_reaction(force=args.options)
+            await poll.set_multiple_choice(force=args.multiple_choice)
+            await poll.set_roles(force=args.roles)
+            await poll.set_weights(force=args.weights)
+            await poll.set_duration(force=args.deadline)
+
+        poll = await self.wizard(ctx, route, server)
+        if poll:
+            await poll.post_embed()
+
+
+    @commands.command(pass_context=True)
     async def quick(self, ctx, *, cmd=None):
         '''Create a quick poll with just a question and some options. Parameters: <Question> (optional)'''
+        server = await ask_for_server(self.bot, ctx.message)
+        if not server:
+            return
 
         async def route(poll):
             await poll.set_name(force=cmd)
-            await poll.set_short(force=str(await generate_word(self.bot, ctx.message.server.id)))
+            await poll.set_short(force=str(await generate_word(self.bot, server.id)))
             await poll.set_anonymous(force='no')
-            await poll.set_multiple_choice(force='no')
             await poll.set_options_reaction()
+            await poll.set_multiple_choice(force='1')
             await poll.set_roles(force='all')
             await poll.set_weights(force='none')
             await poll.set_duration(force='0')
 
-        poll = await self.wizard(ctx, route)
+        poll = await self.wizard(ctx, route, server)
         if poll:
             await poll.post_embed()
 
     @commands.command(pass_context=True)
     async def prepare(self, ctx, *, cmd=None):
         '''Prepare a poll to use later. Parameters: <Question> (optional) '''
+        server = await ask_for_server(self.bot, ctx.message)
+        if not server:
+            return
 
         async def route(poll):
             await poll.set_name(force=cmd)
             await poll.set_short()
             await poll.set_preparation()
             await poll.set_anonymous()
+            await poll.set_options_reaction()
             await poll.set_multiple_choice()
-            if poll.reaction:
-                await poll.set_options_reaction()
-            else:
-                await poll.set_options_traditional()
             await poll.set_roles()
             await poll.set_weights()
             await poll.set_duration()
 
-        poll = await self.wizard(ctx, route)
+        poll = await self.wizard(ctx, route, server)
         if poll:
             await poll.post_embed(destination=ctx.message.author)
 
     @commands.command(pass_context=True)
     async def new(self, ctx, *, cmd=None):
         '''Start the poll wizard to create a new poll step by step. Parameters: <Question> (optional) '''
+        server = await ask_for_server(self.bot, ctx.message)
+        if not server:
+            return
 
         async def route(poll):
             await poll.set_name(force=cmd)
             await poll.set_short()
             await poll.set_anonymous()
+            await poll.set_options_reaction()
             await poll.set_multiple_choice()
-            if poll.reaction:
-                await poll.set_options_reaction()
-            else:
-                await poll.set_options_traditional()
             await poll.set_roles()
             await poll.set_weights()
             await poll.set_duration()
 
-        poll = await self.wizard(ctx, route)
+        poll = await self.wizard(ctx, route, server)
         if poll:
             await poll.post_embed()
 
     # The Wizard!
-    async def wizard(self, ctx, route):
-        server = await ask_for_server(self.bot, ctx.message)
-        if not server:
-            return
-
+    async def wizard(self, ctx, route, server):
         channel = await ask_for_channel(self.bot, server, ctx.message)
         if not channel:
             return
@@ -460,8 +526,67 @@ class PollControls:
                 )
             return
 
-        # no rights, terminate function
+        # info
         member = server.get_member(user_id)
+        if emoji == '❔':
+            is_open = await p.is_open()
+            embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
+                                  description='', color=SETTINGS.color)
+            embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
+
+            # vote rights
+            vote_rights = await p.has_required_role(member)
+            embed.add_field(name=f'{"Can you vote?" if is_open else "Could you vote?"}',
+                            value=f'{"✅" if vote_rights else "❎"}', inline=False)
+
+            # edit rights
+            edit_rights = False
+            if str(member.id) == str(p.author):
+                edit_rights = True
+            elif member.server_permissions.manage_server:
+                edit_rights = True
+            else:
+                result = await self.bot.db.config.find_one({'_id': str(server.id)})
+                if result and result.get('admin_role') in [r.name for r in member.roles]:
+                    edit_rights = True
+            embed.add_field(name='Can you manage the poll?', value=f'{"✅" if edit_rights else "❎"}', inline=False)
+
+            # choices
+            choices = 'You have not voted yet.' if vote_rights else 'You can\'t vote in this poll.'
+            if user.id in p.votes:
+                if p.votes[user.id]['choices'].__len__() > 0:
+                    choices = ', '.join([p.options_reaction[c] for c in p.votes[user.id]['choices']])
+            embed.add_field(name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
+                            value=choices, inline=False)
+
+            # weight
+            if vote_rights:
+                weight = 1
+                if p.weights_roles.__len__() > 0:
+                    valid_weights = [p.weights_numbers[p.weights_roles.index(r)] for r in
+                                     list(set([n.name for n in member.roles]).intersection(set(p.weights_roles)))]
+                    if valid_weights.__len__() > 0:
+                        weight = max(valid_weights)
+            else:
+                weight = 'You can\'t vote in this poll.'
+            embed.add_field(name='Weight of your votes:', value=weight, inline=False)
+
+            # time left
+            deadline = p.get_duration_with_tz()
+            if not is_open:
+                time_left = 'This poll is closed.'
+            elif deadline == 0:
+                time_left = 'Until manually closed.'
+            else:
+                time_left = str(deadline-datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
+
+            embed.add_field(name='Time left in the poll:', value=time_left, inline=False)
+
+            await self.bot.send_message(user, embed=embed)
+            return
+
+        # Assume: User wants to vote with reaction
+        # no rights, terminate function
         if not await p.has_required_role(member):
             await self.bot.remove_reaction(message, emoji, user)
             await self.bot.send_message(user, f'You are not allowed to vote in this poll. Only users with '
@@ -477,7 +602,7 @@ class PollControls:
             if p.anonymous:
                 # immediately remove reaction and to be safe, remove all reactions
                 await self.bot.remove_reaction(message, emoji, user)
-            elif not p.multiple_choice:
+            elif p.multiple_choice == 1:
                 # remove all other reactions
                 for r in message.reactions:
                     if r.emoji and r.emoji != emoji:
