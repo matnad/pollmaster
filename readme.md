@@ -1,4 +1,4 @@
-# Pollmaster V 2.0
+# Pollmaster V 2.1
 
 ## Overview
 
@@ -8,14 +8,24 @@ Here is a quick list of features:
 
 - Voting works with reactions (users don't need to type anything)
 - Anonymous voting is possible
-- Polls can be single- or multiple choice
+- Polls can be single choice, multiple choice or restricted to a specific number of choices
 - You can prepare polls in advance and schedule them to a date and time or manually activate them
 - Polls can be given a deadline or they can be open until closed manually
 - You can restrict which roles are allowed to participate
 - You can assign weights to roles to count their votes more or less
-- Polls are persistent and will be available until you delete them 
+- Polls are persistent and will be available until you delete them
+- Personalised info for each poll by reacting with ❔
 - Everything can be done in private chat with the bot to reduce spam on the server
 - Full multi-server support!
+- For advanced users: Commandline support to create a full poll in one line -> pm!cmd help
+
+## Take a look!
+
+Here is how Pollmaster looks in action:
+
+![Pollmaster in action](https://i.imgur.com/vSXgd0r.png "Poll 1")
+
+![Pollmaster in action](https://i.imgur.com/kMbnmiJ.png "Poll 2")
 
 ## The most important commands
 
@@ -33,19 +43,10 @@ Users with the server permission "Manage Server" will have all rights from the s
 
 To grant users without "Manage Server" poll creation access to the bot, create and distribute the role *polladmin* or *polluser*. If you already have roles for these rights you can tell the bot by typing *pm!adminrole <your role>* and *pm!userrole <your role>*.
 
-## Take a look!
 
-Here is how Pollmaster looks in action:
-
-![Pollmaster in action](https://i.imgur.com/vSXgd0r.png "Poll 1")
-
-![Pollmaster in action](https://i.imgur.com/kMbnmiJ.png "Poll 2")
-
-
-## Need help?
+## Need help? Want to try out Pollmaster?
 
 Join the support discord server by clicking the button on the top of the page.
-
 
 [![Discord Bots](https://discordbots.org/api/widget/444514223075360800.svg)](https://discordbots.org/bot/444514223075360800)
 
