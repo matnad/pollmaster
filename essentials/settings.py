@@ -22,6 +22,7 @@ class Settings:
         self.dbl_token = SECRETS.dbl_token
         self.mongo_db = SECRETS.mongo_db
         self.bot_token = SECRETS.bot_token
+        self.mode = SECRETS.mode
 
 
 SETTINGS = Settings()
