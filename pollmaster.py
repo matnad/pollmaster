@@ -1,3 +1,4 @@
+import asyncio
 import traceback
 import logging
 import aiohttp
@@ -74,6 +75,10 @@ async def on_ready():
     except:
         print("Problem verifying servers.")
 
+    # cache prefixes
+    bot.pre = {entry['_id']:entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
+    bot.locks = {sid: asyncio.Lock() for sid in [s.id for s in bot.servers]}
+
     print("Servers verified. Bot running.")
 
 
@@ -97,6 +102,8 @@ async def on_command_error(e, ctx):
 
         # log error
         logger.error(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
+        if SETTINGS.mode == 'development':
+            raise e
 
         if SETTINGS.msg_errors:
             # send discord message for unexpected errors
@@ -119,6 +126,7 @@ async def on_server_join(server):
             {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
             upsert=True
         )
+        bot.pre[str(server.id)] = 'pm!'
 
 
 bot.run(SETTINGS.bot_token, reconnect=True)
