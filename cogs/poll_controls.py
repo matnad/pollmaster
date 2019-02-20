@@ -292,6 +292,8 @@ class PollControls:
         except SystemExit:
             await self.say_error(ctx, error_text=helpstring)
             return
+        except:
+            return
 
         # pass arguments to the wizard
         async def route(poll):
