@@ -29,6 +29,7 @@ class Config:
                   f'If you would like to add a trailing whitespace to the prefix, use `{pre}prefix {pre}\w`.'
 
         await self.bot.db.config.update_one({'_id': str(server.id)}, {'$set': {'prefix': str(pre)}}, upsert=True)
+        self.bot.pre[str(server.id)] = str(pre)
         await self.bot.say(msg)
 
     @commands.command(pass_context=True)
