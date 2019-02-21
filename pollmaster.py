@@ -1,4 +1,5 @@
 import asyncio
+import sys
 import traceback
 import logging
 import aiohttp
@@ -9,6 +10,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 from essentials.multi_server import get_pre
 from essentials.settings import SETTINGS
+from utils.asyncio_unique_queue import UniqueQueue
 from utils.import_old_database import import_old_database
 
 bot_config = {
@@ -76,10 +78,17 @@ async def on_ready():
         print("Problem verifying servers.")
 
     # cache prefixes
-    bot.pre = {entry['_id']:entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
-    bot.locks = {sid: asyncio.Lock() for sid in [s.id for s in bot.servers]}
+    bot.pre = {entry['_id']: entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
+
+    # global locks and caches for performance when voting rapidly
+    bot.locks = {}
+    bot.poll_cache = {}
+    # bot.poll_refresh_q = {}
+    bot.poll_refresh_q = UniqueQueue()
 
     print("Servers verified. Bot running.")
+
+
 
 
 @bot.event
@@ -102,8 +111,6 @@ async def on_command_error(e, ctx):
 
         # log error
         logger.error(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
-        if SETTINGS.mode == 'development':
-            raise e
         traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
 
         if SETTINGS.msg_errors:
@@ -116,6 +123,9 @@ async def on_command_error(e, ctx):
                 timestamp=ctx.message.timestamp
             )
             await bot.send_message(bot.owner, embed=e)
+
+        # if SETTINGS.mode == 'development':
+        raise e
 
 
 @bot.event

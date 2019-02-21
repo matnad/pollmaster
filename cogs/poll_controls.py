@@ -5,6 +5,7 @@ import datetime
 import json
 import logging
 import shlex
+import traceback
 
 import discord
 import pytz
@@ -23,8 +24,30 @@ from essentials.exceptions import StopWizard
 class PollControls:
     def __init__(self, bot):
         self.bot = bot
+        self.bot.loop.create_task(self.refresh_polls())
+        self.ignore_next_removed_reaction = {}
+
+
 
     # General Methods
+    async def refresh_polls(self):
+        """This function runs every 5 seconds to refresh poll messages when needed"""
+        while True:
+            try:
+                for i in range(self.bot.poll_refresh_q.qsize()):
+                    values = await self.bot.poll_refresh_q.get()
+                    if values.get('lock') and not values.get('lock')._waiters:
+                        p = await Poll.load_from_db(self.bot, str(values.get('sid')), values.get('label'))
+                        if p:
+                            await self.bot.edit_message(values.get('msg'), embed=await p.generate_embed())
+
+                        self.bot.poll_refresh_q.task_done()
+                    else:
+                        await self.bot.poll_refresh_q.put_unique_id(values)
+            except AttributeError:
+                pass
+            await asyncio.sleep(5)
+
     def get_lock(self, server_id):
         if not self.bot.locks.get(str(server_id)):
             self.bot.locks[server_id] = asyncio.Lock()
@@ -455,10 +478,17 @@ class PollControls:
         if not emoji:
             return
 
-        # check if we can find a poll label
+        # check if removed by the bot.. this is a bit hacky but discord doesn't provide the correct info...
         message_id = data.get('message_id')
-        channel_id = data.get('channel_id')
         user_id = data.get('user_id')
+        if self.ignore_next_removed_reaction.get(str(message_id)+str(emoji)) == user_id:
+            del self.ignore_next_removed_reaction[str(message_id)+str(emoji)]
+            return
+
+
+        # check if we can find a poll label
+        channel_id = data.get('channel_id')
+
         channel = self.bot.get_channel(channel_id)
         user = await self.bot.get_user_info(user_id)  # only do this once
         if not channel:
@@ -485,15 +515,20 @@ class PollControls:
         server = await ask_for_server(self.bot, user_msg, label)
 
         # this is exclusive
-        async with self.get_lock(server.id):
-            p = await Poll.load_from_db(self.bot, server.id, label)
+
+        lock = self.get_lock(server.id)
+        async with lock:
+            # try to load poll form cache
+            p = self.bot.poll_cache.get(str(server.id) + label)
+            if not p:
+                p = await Poll.load_from_db(self.bot, server.id, label)
             if not isinstance(p, Poll):
                 return
 
             if not p.anonymous:
                 # for anonymous polls we can't unvote because we need to hide reactions
                 member = server.get_member(user_id)
-                await p.unvote(member, emoji, message)
+                await p.unvote(member, emoji, message, lock)
 
 
     async def do_on_reaction_add(self, data):
@@ -539,8 +574,11 @@ class PollControls:
 
         # this is exclusive to keep database access sequential
         # hopefully it will scale well enough or I need a different solution
-        async with self.get_lock(server.id):
-            p = await Poll.load_from_db(self.bot, server.id, label)
+        lock = self.get_lock(server.id)
+        async with lock:
+            p = self.bot.poll_cache.get(str(server.id)+label)
+            if not p:
+                p = await Poll.load_from_db(self.bot, server.id, label)
             if not isinstance(p, Poll):
                 return
 
@@ -623,20 +661,26 @@ class PollControls:
                                                   f'at least one of these roles can vote:\n{", ".join(p.roles)}')
                 return
 
+            # check if we need to remove reactions (this will trigger on_reaction_remove)
+            if str(channel.type) != 'private' and p.anonymous:
+                # immediately remove reaction and to be safe, remove all reactions
+                self.ignore_next_removed_reaction[str(message.id)+str(emoji)] = user_id
+                await self.bot.remove_reaction(message, emoji, user)
+
             # order here is crucial since we can't determine if a reaction was removed by the bot or user
             # update database with vote
-            await p.vote(member, emoji, message)
-            #
-            # check if we need to remove reactions (this will trigger on_reaction_remove)
-            if str(channel.type) != 'private':
-                if p.anonymous:
-                    # immediately remove reaction and to be safe, remove all reactions
-                    await self.bot.remove_reaction(message, emoji, user)
-                elif p.multiple_choice == 1:
-                    # remove all other reactions
-                    for r in message.reactions:
-                        if r.emoji and r.emoji != emoji:
-                            await self.bot.remove_reaction(message, r.emoji, user)
+            await p.vote(member, emoji, message, lock)
+
+            # cant do this until we figure out how to see who removed the reaction?
+            # for now MC 1 is like MC x
+            # if str(channel.type) != 'private' and p.multiple_choice == 1:
+            #     # remove all other reactions
+            #     # if lock._waiters.__len__() == 0:
+            #     for r in message.reactions:
+            #         if r.emoji and r.emoji != emoji:
+            #             await self.bot.remove_reaction(message, r.emoji, user)
+            #     pass
+
 
 def setup(bot):
     global logger
