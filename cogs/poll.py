@@ -43,6 +43,8 @@ class Poll:
             if channel is None:
                 channel = ctx.message.channel
 
+            self.id = None
+
             self.author = ctx.message.author
 
             self.server = server
@@ -840,6 +842,7 @@ class Poll:
             return None
 
     async def from_dict(self, d):
+        self.id = d['_id']
         self.server = self.bot.get_server(str(d['server_id']))
         self.channel = self.bot.get_channel(str(d['channel_id']))
         self.author = await self.bot.get_user_info(str(d['author']))
@@ -1104,7 +1107,7 @@ class Poll:
         else:
             return sum([1 for c in [u for u in self.votes] if option in self.votes[c]['choices']])
 
-    async def vote(self, user, option, message):
+    async def vote(self, user, option, message, lock):
         if not await self.is_open():
             # refresh to show closed poll
             await self.bot.edit_message(message, embed=await self.generate_embed())
@@ -1114,7 +1117,7 @@ class Poll:
             return
 
         choice = 'invalid'
-        refresh_poll = True
+        # refresh_poll = True
 
         # get weight
         weight = 1
@@ -1129,55 +1132,69 @@ class Poll:
         else:
             self.votes[user.id]['weight'] = weight
 
-        if self.reaction:
-            if self.options_reaction_default:
-                if option in self.options_reaction:
-                    choice = self.options_reaction.index(option)
-            else:
-                if option in AZ_EMOJIS:
-                    choice = AZ_EMOJIS.index(option)
-
-            if choice != 'invalid':
-                if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
-                    if choice in self.votes[user.id]['choices']:
-                        if self.anonymous:
-                            # anonymous multiple choice -> can't unreact so we toggle with react
-                            await self.unvote(user, option, message)
-                            return
-                        refresh_poll = False
-                    else:
-                        if self.multiple_choice > 0 and self.votes[user.id]['choices'].__len__() >= self.multiple_choice:
-                            say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
-                                       f'Before you can vote again, you need to unvote one of your choices.'
-                            embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
-                            embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
-                            await self.bot.send_message(user, embed=embed)
-                            refresh_poll = False
-                        else:
-                            self.votes[user.id]['choices'].append(choice)
-                            self.votes[user.id]['choices'] = list(set(self.votes[user.id]['choices']))
-                else:
-                    if [choice] == self.votes[user.id]['choices']:
-                        refresh_poll = False
-                        if self.anonymous:
-                            # undo anonymous vote
-                            await self.unvote(user, option, message)
-                            return
-                    else:
-                        self.votes[user.id]['choices'] = [choice]
+        if self.options_reaction_default:
+            if option in self.options_reaction:
+                choice = self.options_reaction.index(option)
         else:
-            pass
+            if option in AZ_EMOJIS:
+                choice = AZ_EMOJIS.index(option)
+
+        if choice != 'invalid':
+            # if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
+            if choice in self.votes[user.id]['choices']:
+                if self.anonymous:
+                    # anonymous multiple choice -> can't unreact so we toggle with react
+                    await self.unvote(user, option, message, lock)
+                # refresh_poll = False
+            else:
+                if self.multiple_choice > 0 and self.votes[user.id]['choices'].__len__() >= self.multiple_choice:
+                    say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
+                               f'Before you can vote again, you need to unvote one of your choices.'
+                    embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
+                    embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
+                    await self.bot.send_message(user, embed=embed)
+                    # refresh_poll = False
+                else:
+                    self.votes[user.id]['choices'].append(choice)
+                    self.votes[user.id]['choices'] = list(set(self.votes[user.id]['choices']))
+            # else:
+            #     if [choice] == self.votes[user.id]['choices']:
+            #         # refresh_poll = False
+            #         # if self.anonymous:
+            #         # undo anonymous vote
+            #         await self.unvote(user, option, message, lock)
+            #         return
+            #     else:
+            #         self.votes[user.id]['choices'] = [choice]
+
+        else:
+            # unknow emoji
+            return
 
         # commit
-        await self.save_to_db()
+        if lock._waiters.__len__() == 0:
+            # updating DB, clearing cache and refresh if necessary
+            await self.save_to_db()
+            await self.bot.poll_refresh_q.put_unique_id(
+                {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
+            if self.bot.poll_cache.get(str(self.server.id) + self.short):
+                del self.bot.poll_cache[str(self.server.id) + self.short]
+            # refresh
+            # if refresh_poll:
+                # edit message if there is a real change
+                # await self.bot.edit_message(message, embed=await self.generate_embed())
+                # self.bot.poll_refresh_q.append(str(self.id))
+        else:
+            # cache the poll until the queue is empty
+            self.bot.poll_cache[str(self.server.id)+self.short] = self
 
-        # refresh
-        if refresh_poll:
-            # edit message if there is a real change
-            await self.bot.edit_message(message, embed=await self.generate_embed())
+        # if refresh_poll:
+        #     await self.bot.poll_refresh_q.put_unique_id({'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
 
 
-    async def unvote(self, user, option, message):
+
+
+    async def unvote(self, user, option, message, lock):
         if not await self.is_open():
             # refresh to show closed poll
             await self.bot.edit_message(message, embed=await self.generate_embed())
@@ -1189,6 +1206,7 @@ class Poll:
         if str(user.id) not in self.votes: return
 
         choice = 'invalid'
+
         if self.options_reaction_default:
             if option in self.options_reaction:
                 choice = self.options_reaction.index(option)
@@ -1199,8 +1217,17 @@ class Poll:
         if choice != 'invalid' and choice in self.votes[user.id]['choices']:
             try:
                 self.votes[user.id]['choices'].remove(choice)
-                await self.save_to_db()
-                await self.bot.edit_message(message, embed=await self.generate_embed())
+                if lock._waiters.__len__() == 0:
+                    # updating DB, clearing cache and refreshing message
+                    await self.save_to_db()
+                    await self.bot.poll_refresh_q.put_unique_id(
+                        {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
+                    if self.bot.poll_cache.get(str(self.server.id) + self.short):
+                        del self.bot.poll_cache[str(self.server.id) + self.short]
+                    # await self.bot.edit_message(message, embed=await self.generate_embed())
+                else:
+                    # cache the poll until the queue is empty
+                    self.bot.poll_cache[str(self.server.id) + self.short] = self
             except ValueError:
                 pass
 
