@@ -104,14 +104,15 @@ async def on_command_error(e, ctx):
         logger.error(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
         if SETTINGS.mode == 'development':
             raise e
+        traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
 
         if SETTINGS.msg_errors:
             # send discord message for unexpected errors
             e = discord.Embed(
                 title=f"Error With command: {ctx.command.name}",
-                description=f"```py\n{type(e).__name__}: {e}\n```\n\nContent:{ctx.message.content}"
-                            f"\n\tServer: {ctx.message.server}\n\tChannel: <#{ctx.message.channel.id}>"
-                            f"\n\tAuthor: <@{ctx.message.author.id}>",
+                description=f"```py\n{type(e).__name__}: {str(e)}\n```\n\nContent:{ctx.message.content}"
+                            f"\n\tServer: {ctx.message.server}\n\tChannel: <#{ctx.message.channel}>"
+                            f"\n\tAuthor: <@{ctx.message.author}>",
                 timestamp=ctx.message.timestamp
             )
             await bot.send_message(bot.owner, embed=e)
