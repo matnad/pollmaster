@@ -310,81 +310,81 @@ class PollControls:
     @commands.command(pass_context=True)
     async def cmd(self, ctx, *, cmd=None):
         '''The old, command style way paired with the wizard.'''
-        # await self.say_embed(ctx, say_text='This command is temporarily disabled.')
-        server = await ask_for_server(self.bot, ctx.message)
-        if not server:
-            return
-        pre = await get_server_pre(self.bot, server)
-        try:
-            # generate the argparser and handle invalid stuff
-            descr = 'Accept poll settings via commandstring. \n\n' \
-                    '**Wrap all arguments in quotes like this:** \n' \
-                    f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
-                    'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
-                    'If an argument is invalid, the wizard will step in. ' \
-                    'If the command string is invalid, you will get this error :)'
-            parser = argparse.ArgumentParser(description=descr, formatter_class=CustomFormatter, add_help=False)
-            parser.add_argument('-question', '-q')
-            parser.add_argument('-label', '-l', default=str(await generate_word(self.bot, server.id)))
-            parser.add_argument('-options', '-o')
-            parser.add_argument('-multiple_choice', '-mc', default='1')
-            parser.add_argument('-roles', '-r', default='all')
-            parser.add_argument('-weights', '-w', default='none')
-            parser.add_argument('-deadline', '-d', default='0')
-            parser.add_argument('-anonymous', '-a', action="store_true")
-
-            helpstring = parser.format_help()
-            helpstring = helpstring.replace("pollmaster.py", f"{pre}cmd ")
-
-            if cmd and cmd == 'help':
-                await self.say_embed(ctx, say_text=helpstring)
-                return
-
-            try:
-                cmds = shlex.split(cmd)
-            except ValueError:
-                await self.say_error(ctx, error_text=helpstring)
-                return
-            except:
-                return
-
-            try:
-                args, unknown_args = parser.parse_known_args(cmds)
-            except SystemExit:
-                await self.say_error(ctx, error_text=helpstring)
-                return
-            except:
-                return
-
-            if unknown_args:
-                error_text = f'**There was an error reading the command line options!**.\n' \
-                             f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
-                             f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
-                             f'\n\nHere are the arguments I could not understand:\n'
-                error_text += '`'+'\n'.join(unknown_args)+'`'
-                error_text += f'\n\nHere are the arguments which are ok:\n'
-                error_text += '`' + '\n'.join([f'{k}: {v}' for k, v in vars(args).items()]) + '`'
-
-                await self.say_error(ctx, error_text=error_text, footer_text=f'type `{pre}cmd help` for details.')
-                return
-
-            # pass arguments to the wizard
-            async def route(poll):
-                await poll.set_name(force=args.question)
-                await poll.set_short(force=args.label)
-                await poll.set_anonymous(force=f'{"yes" if args.anonymous else "no"}')
-                await poll.set_options_reaction(force=args.options)
-                await poll.set_multiple_choice(force=args.multiple_choice)
-                await poll.set_roles(force=args.roles)
-                await poll.set_weights(force=args.weights)
-                await poll.set_duration(force=args.deadline)
-
-            poll = await self.wizard(ctx, route, server)
-            if poll:
-                await poll.post_embed(destination=poll.channel)
-        except Exception as error:
-            logger.error("ERROR IN pm!cmd")
-            logger.exception(error)
+        await self.say_embed(ctx, say_text='This command is temporarily disabled.')
+        # server = await ask_for_server(self.bot, ctx.message)
+        # if not server:
+        #     return
+        # pre = await get_server_pre(self.bot, server)
+        # try:
+        #     # generate the argparser and handle invalid stuff
+        #     descr = 'Accept poll settings via commandstring. \n\n' \
+        #             '**Wrap all arguments in quotes like this:** \n' \
+        #             f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
+        #             'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
+        #             'If an argument is invalid, the wizard will step in. ' \
+        #             'If the command string is invalid, you will get this error :)'
+        #     parser = argparse.ArgumentParser(description=descr, formatter_class=CustomFormatter, add_help=False)
+        #     parser.add_argument('-question', '-q')
+        #     parser.add_argument('-label', '-l', default=str(await generate_word(self.bot, server.id)))
+        #     parser.add_argument('-options', '-o')
+        #     parser.add_argument('-multiple_choice', '-mc', default='1')
+        #     parser.add_argument('-roles', '-r', default='all')
+        #     parser.add_argument('-weights', '-w', default='none')
+        #     parser.add_argument('-deadline', '-d', default='0')
+        #     parser.add_argument('-anonymous', '-a', action="store_true")
+        #
+        #     helpstring = parser.format_help()
+        #     helpstring = helpstring.replace("pollmaster.py", f"{pre}cmd ")
+        #
+        #     if cmd and cmd == 'help':
+        #         await self.say_embed(ctx, say_text=helpstring)
+        #         return
+        #
+        #     try:
+        #         cmds = shlex.split(cmd)
+        #     except ValueError:
+        #         await self.say_error(ctx, error_text=helpstring)
+        #         return
+        #     except:
+        #         return
+        #
+        #     try:
+        #         args, unknown_args = parser.parse_known_args(cmds)
+        #     except SystemExit:
+        #         await self.say_error(ctx, error_text=helpstring)
+        #         return
+        #     except:
+        #         return
+        #
+        #     if unknown_args:
+        #         error_text = f'**There was an error reading the command line options!**.\n' \
+        #                      f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
+        #                      f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
+        #                      f'\n\nHere are the arguments I could not understand:\n'
+        #         error_text += '`'+'\n'.join(unknown_args)+'`'
+        #         error_text += f'\n\nHere are the arguments which are ok:\n'
+        #         error_text += '`' + '\n'.join([f'{k}: {v}' for k, v in vars(args).items()]) + '`'
+        #
+        #         await self.say_error(ctx, error_text=error_text, footer_text=f'type `{pre}cmd help` for details.')
+        #         return
+        #
+        #     # pass arguments to the wizard
+        #     async def route(poll):
+        #         await poll.set_name(force=args.question)
+        #         await poll.set_short(force=args.label)
+        #         await poll.set_anonymous(force=f'{"yes" if args.anonymous else "no"}')
+        #         await poll.set_options_reaction(force=args.options)
+        #         await poll.set_multiple_choice(force=args.multiple_choice)
+        #         await poll.set_roles(force=args.roles)
+        #         await poll.set_weights(force=args.weights)
+        #         await poll.set_duration(force=args.deadline)
+        #
+        #     poll = await self.wizard(ctx, route, server)
+        #     if poll:
+        #         await poll.post_embed(destination=poll.channel)
+        # except Exception as error:
+        #     logger.error("ERROR IN pm!cmd")
+        #     logger.exception(error)
 
 
     @commands.command(pass_context=True)
