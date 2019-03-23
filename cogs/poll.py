@@ -856,7 +856,10 @@ class Poll:
         self.server = self.bot.get_server(str(d['server_id']))
         self.channel = self.bot.get_channel(str(d['channel_id']))
         # self.author = await self.bot.get_user_info(str(d['author']))
-        self.author = self.server.get_member(d['author'])
+        if self.server:
+            self.author = self.server.get_member(d['author'])
+        else:
+            self.author = None
         self.name = d['name']
         self.short = d['short']
         self.anonymous = d['anonymous']

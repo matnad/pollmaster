@@ -54,9 +54,10 @@ class PollControls:
                         if not p.open:
                             await self.bot.send_message(p.channel, 'This poll has reached the deadline and is closed!')
                             await p.post_embed(destination=p.channel)
-            except AttributeError:
+            except AttributeError as ae:
                 #Database not loaded yet
                 logger.warning("Attribute Error in close_polls loop")
+                logger.exception(ae)
                 pass
             except:
                 #Never break this loop due to an error
