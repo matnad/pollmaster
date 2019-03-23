@@ -56,7 +56,7 @@ async def on_ready():
     bot.db = mongo.pollmaster
     bot.session = aiohttp.ClientSession()
     print(bot.db)
-    await bot.change_presence(game=discord.Game(name=f'pm!help - v2.1 is live!'))
+    await bot.change_presence(game=discord.Game(name=f'pm!help - v2.2'))
 
     # check discord server configs
     try:
@@ -69,11 +69,12 @@ async def on_ready():
                     {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
                     upsert=True
                 )
-                try:
-                    await import_old_database(bot, server)
-                    print(str(server), "updated.")
-                except:
-                    print(str(server.id), "failed.")
+                # stopping migration support.
+                # try:
+                #     await import_old_database(bot, server)
+                #     print(str(server), "updated.")
+                # except:
+                #     print(str(server.id), "failed.")
     except:
         print("Problem verifying servers.")
 
@@ -82,9 +83,8 @@ async def on_ready():
 
     # global locks and caches for performance when voting rapidly
     bot.locks = {}
-    bot.poll_cache = {}
-    # bot.poll_refresh_q = {}
-    bot.poll_refresh_q = UniqueQueue()
+    # bot.poll_cache = {}
+    # bot.poll_refresh_q = UniqueQueue()
 
     print("Servers verified. Bot running.")
 
