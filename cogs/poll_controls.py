@@ -45,8 +45,11 @@ class PollControls:
                         if not p.server:
                             continue
                         if p.active:
-                            await self.bot.send_message(p.channel, 'This poll has been scheduled and is active now!')
-                            await p.post_embed(destination=p.channel)
+                            try:
+                                await self.bot.send_message(p.channel, 'This poll has been scheduled and is active now!')
+                                await p.post_embed(destination=p.channel)
+                            except:
+                                continue
 
                 query = self.bot.db.polls.find({'open': True, 'duration': {"$not": re.compile("0")}})
                 if query:
@@ -56,8 +59,11 @@ class PollControls:
                         if not p.server:
                             continue
                         if not p.open:
-                            await self.bot.send_message(p.channel, 'This poll has reached the deadline and is closed!')
-                            await p.post_embed(destination=p.channel)
+                            try:
+                                await self.bot.send_message(p.channel, 'This poll has reached the deadline and is closed!')
+                                await p.post_embed(destination=p.channel)
+                            except:
+                                continue
             except AttributeError as ae:
                 #Database not loaded yet
                 logger.warning("Attribute Error in close_polls loop")
