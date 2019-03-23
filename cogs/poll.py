@@ -76,6 +76,8 @@ class Poll:
             self.votes = {}
 
     async def is_open(self, update_db=True):
+        if self.server is None:
+            return
         if open and self.duration != 0 \
                 and datetime.datetime.utcnow().replace(tzinfo=pytz.utc) > self.get_duration_with_tz():
             self.open = False
@@ -84,6 +86,8 @@ class Poll:
         return self.open
 
     async def is_active(self, update_db=True):
+        if self.server is None:
+            return
         if not self.active and self.activation != 0 \
                 and datetime.datetime.utcnow().replace(tzinfo=pytz.utc) > self.get_activation_with_tz():
             self.active = True
