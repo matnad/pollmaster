@@ -42,6 +42,8 @@ class PollControls:
                     for pd in [poll async for poll in query]:
                         p = Poll(self.bot, load=True)
                         await p.from_dict(pd)
+                        if not p.server:
+                            continue
                         if p.active:
                             await self.bot.send_message(p.channel, 'This poll has been scheduled and is active now!')
                             await p.post_embed(destination=p.channel)
@@ -51,6 +53,8 @@ class PollControls:
                     for pd in [poll async for poll in query]:
                         p = Poll(self.bot, load=True)
                         await p.from_dict(pd)
+                        if not p.server:
+                            continue
                         if not p.open:
                             await self.bot.send_message(p.channel, 'This poll has reached the deadline and is closed!')
                             await p.post_embed(destination=p.channel)
