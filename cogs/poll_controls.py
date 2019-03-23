@@ -63,7 +63,7 @@ class PollControls:
                 logger.error("Other Error in close_polls loop")
                 pass
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(30)
 
     def get_lock(self, server_id):
         if not self.bot.locks.get(str(server_id)):
