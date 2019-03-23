@@ -100,8 +100,12 @@ async def ask_for_channel(bot, server, message):
     if str(message.channel.type) == 'text':
         return message.channel
 
+    # build channel list that the user is allowed to send messages to
+    user = message.author
+    member = server.get_member(user.id)
+    channel_list = [c for c in server.channels if str(c.type) == 'text' and c.permissions_for(member).send_messages]
+
     # if exactly 1 channel, return it
-    channel_list = [c for c in server.channels if str(c.type) == 'text']
     if channel_list.__len__() == 1:
         return channel_list[0]
 

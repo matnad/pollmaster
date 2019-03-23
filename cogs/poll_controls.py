@@ -4,7 +4,9 @@ import copy
 import datetime
 import json
 import logging
+import re
 import shlex
+import string
 import traceback
 
 import discord
@@ -20,32 +22,47 @@ from essentials.settings import SETTINGS
 from utils.poll_name_generator import generate_word
 from essentials.exceptions import StopWizard
 
+## A-Z Emojis for Discord
+AZ_EMOJIS = [(b'\\U0001f1a'.replace(b'a', bytes(hex(224 + (6 + i))[2:], "utf-8"))).decode("unicode-escape") for i in
+             range(26)]
 
 class PollControls:
     def __init__(self, bot):
         self.bot = bot
-        self.bot.loop.create_task(self.refresh_polls())
+        self.bot.loop.create_task(self.close_polls())
         self.ignore_next_removed_reaction = {}
 
-
-
     # General Methods
-    async def refresh_polls(self):
-        """This function runs every 5 seconds to refresh poll messages when needed"""
+    async def close_polls(self):
+        """This function runs every 60 seconds to schedule prepared polls and close expired polls"""
         while True:
             try:
-                for i in range(self.bot.poll_refresh_q.qsize()):
-                    values = await self.bot.poll_refresh_q.get()
-                    if values.get('lock') and not values.get('lock')._waiters:
-                        p = await Poll.load_from_db(self.bot, str(values.get('sid')), values.get('label'))
-                        if p:
-                            await self.bot.edit_message(values.get('msg'), embed=await p.generate_embed())
+                query = self.bot.db.polls.find({'active': False, 'activation': {"$not": re.compile("0")}})
+                if query:
+                    for pd in [poll async for poll in query]:
+                        p = Poll(self.bot, load=True)
+                        await p.from_dict(pd)
+                        if p.active:
+                            await self.bot.send_message(p.channel, 'This poll has been scheduled and is active now!')
+                            await p.post_embed(destination=p.channel)
 
-                        self.bot.poll_refresh_q.task_done()
-                    else:
-                        await self.bot.poll_refresh_q.put_unique_id(values)
+                query = self.bot.db.polls.find({'open': True, 'duration': {"$not": re.compile("0")}})
+                if query:
+                    for pd in [poll async for poll in query]:
+                        p = Poll(self.bot, load=True)
+                        await p.from_dict(pd)
+                        if not p.open:
+                            await self.bot.send_message(p.channel, 'This poll has reached the deadline and is closed!')
+                            await p.post_embed(destination=p.channel)
             except AttributeError:
+                #Database not loaded yet
+                logger.warning("Attribute Error in close_polls loop")
                 pass
+            except:
+                #Never break this loop due to an error
+                logger.error("Other Error in close_polls loop")
+                pass
+
             await asyncio.sleep(5)
 
     def get_lock(self, server_id):
@@ -92,7 +109,7 @@ class PollControls:
 
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.server)
-            error = f'Please specify the label of a poll after the close command. \n' \
+            error = f'Please specify the label of a poll after the activate command. \n' \
                     f'`{pre}activate <poll_label>`'
             await self.say_error(ctx, error)
         else:
@@ -129,7 +146,7 @@ class PollControls:
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.server)
             error = f'Please specify the label of a poll after the delete command. \n' \
-                    f'`{pre}close <poll_label>`'
+                    f'`{pre}delete <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, str(server.id), short)
@@ -201,8 +218,8 @@ class PollControls:
 
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.server)
-            error = f'Please specify the label of a poll after the close command. \n' \
-                    f'`{pre}close <poll_label>`'
+            error = f'Please specify the label of a poll after the export command. \n' \
+                    f'`{pre}export <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, str(server.id), short)
@@ -253,7 +270,7 @@ class PollControls:
             else:
                 return
 
-            def item_fct(i,item):
+            def item_fct(i, item):
                 return f':black_small_square: **{item["short"]}**: {item["name"]}'
 
             title = f' Listing {short} polls'
@@ -281,78 +298,81 @@ class PollControls:
     @commands.command(pass_context=True)
     async def cmd(self, ctx, *, cmd=None):
         '''The old, command style way paired with the wizard.'''
-        await self.say_embed(ctx, say_text='This command is temporarily disabled.')
-        # server = await ask_for_server(self.bot, ctx.message)
-        # if not server:
-        #     return
-        # pre = await get_server_pre(self.bot, server)
-        #
-        # # generate the argparser and handle invalid stuff
-        # descr = 'Accept poll settings via commandstring. \n\n' \
-        #         '**Wrap all arguments in quotes like this:** \n' \
-        #         f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
-        #         'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
-        #         'If an argument is invalid, the wizard will step in. ' \
-        #         'If the command string is invalid, you will get this error :)'
-        # parser = argparse.ArgumentParser(description=descr, formatter_class=CustomFormatter, add_help=False)
-        # parser.add_argument('-question', '-q')
-        # parser.add_argument('-label', '-l', default=str(await generate_word(self.bot, server.id)))
-        # parser.add_argument('-options', '-o')
-        # parser.add_argument('-multiple_choice', '-mc', default='1')
-        # parser.add_argument('-roles', '-r', default='all')
-        # parser.add_argument('-weights', '-w', default='none')
-        # parser.add_argument('-deadline', '-d', default='0')
-        # parser.add_argument('-anonymous', '-a', action="store_true")
-        #
-        # helpstring = parser.format_help()
-        # helpstring = helpstring.replace("pollmaster.py", f"{pre}cmd ")
-        #
-        # if cmd and cmd == 'help':
-        #     await self.say_embed(ctx, say_text=helpstring)
-        #     return
-        #
-        # try:
-        #     cmds = shlex.split(cmd)
-        # except ValueError:
-        #     await self.say_error(ctx, error_text=helpstring)
-        #     return
-        # except:
-        #     return
-        #
-        # try:
-        #     args, unknown_args = parser.parse_known_args(cmds)
-        # except SystemExit:
-        #     await self.say_error(ctx, error_text=helpstring)
-        #     return
-        # except:
-        #     return
-        #
-        # if unknown_args:
-        #     error_text = f'**There was an error reading the command line options!**.\n' \
-        #                  f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
-        #                  f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
-        #                  f'\n\nHere are the arguments I could not understand:\n'
-        #     error_text += '`'+'\n'.join(unknown_args)+'`'
-        #     error_text += f'\n\nHere are the arguments which are ok:\n'
-        #     error_text += '`' + '\n'.join([f'{k}: {v}' for k, v in vars(args).items()]) + '`'
-        #
-        #     await self.say_error(ctx, error_text=error_text, footer_text=f'type `{pre}cmd help` for details.')
-        #     return
-        #
-        # # pass arguments to the wizard
-        # async def route(poll):
-        #     await poll.set_name(force=args.question)
-        #     await poll.set_short(force=args.label)
-        #     await poll.set_anonymous(force=f'{"yes" if args.anonymous else "no"}')
-        #     await poll.set_options_reaction(force=args.options)
-        #     await poll.set_multiple_choice(force=args.multiple_choice)
-        #     await poll.set_roles(force=args.roles)
-        #     await poll.set_weights(force=args.weights)
-        #     await poll.set_duration(force=args.deadline)
-        #
-        # poll = await self.wizard(ctx, route, server)
-        # if poll:
-        #     await poll.post_embed(destination=poll.channel)
+        # await self.say_embed(ctx, say_text='This command is temporarily disabled.')
+        server = await ask_for_server(self.bot, ctx.message)
+        if not server:
+            return
+        pre = await get_server_pre(self.bot, server)
+        try:
+            # generate the argparser and handle invalid stuff
+            descr = 'Accept poll settings via commandstring. \n\n' \
+                    '**Wrap all arguments in quotes like this:** \n' \
+                    f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
+                    'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
+                    'If an argument is invalid, the wizard will step in. ' \
+                    'If the command string is invalid, you will get this error :)'
+            parser = argparse.ArgumentParser(description=descr, formatter_class=CustomFormatter, add_help=False)
+            parser.add_argument('-question', '-q')
+            parser.add_argument('-label', '-l', default=str(await generate_word(self.bot, server.id)))
+            parser.add_argument('-options', '-o')
+            parser.add_argument('-multiple_choice', '-mc', default='1')
+            parser.add_argument('-roles', '-r', default='all')
+            parser.add_argument('-weights', '-w', default='none')
+            parser.add_argument('-deadline', '-d', default='0')
+            parser.add_argument('-anonymous', '-a', action="store_true")
+
+            helpstring = parser.format_help()
+            helpstring = helpstring.replace("pollmaster.py", f"{pre}cmd ")
+
+            if cmd and cmd == 'help':
+                await self.say_embed(ctx, say_text=helpstring)
+                return
+
+            try:
+                cmds = shlex.split(cmd)
+            except ValueError:
+                await self.say_error(ctx, error_text=helpstring)
+                return
+            except:
+                return
+
+            try:
+                args, unknown_args = parser.parse_known_args(cmds)
+            except SystemExit:
+                await self.say_error(ctx, error_text=helpstring)
+                return
+            except:
+                return
+
+            if unknown_args:
+                error_text = f'**There was an error reading the command line options!**.\n' \
+                             f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
+                             f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
+                             f'\n\nHere are the arguments I could not understand:\n'
+                error_text += '`'+'\n'.join(unknown_args)+'`'
+                error_text += f'\n\nHere are the arguments which are ok:\n'
+                error_text += '`' + '\n'.join([f'{k}: {v}' for k, v in vars(args).items()]) + '`'
+
+                await self.say_error(ctx, error_text=error_text, footer_text=f'type `{pre}cmd help` for details.')
+                return
+
+            # pass arguments to the wizard
+            async def route(poll):
+                await poll.set_name(force=args.question)
+                await poll.set_short(force=args.label)
+                await poll.set_anonymous(force=f'{"yes" if args.anonymous else "no"}')
+                await poll.set_options_reaction(force=args.options)
+                await poll.set_multiple_choice(force=args.multiple_choice)
+                await poll.set_roles(force=args.roles)
+                await poll.set_weights(force=args.weights)
+                await poll.set_duration(force=args.deadline)
+
+            poll = await self.wizard(ctx, route, server)
+            if poll:
+                await poll.post_embed(destination=poll.channel)
+        except Exception as error:
+            logger.error("ERROR IN pm!cmd")
+            logger.exception(error)
 
 
     @commands.command(pass_context=True)
@@ -481,21 +501,29 @@ class PollControls:
         # check if removed by the bot.. this is a bit hacky but discord doesn't provide the correct info...
         message_id = data.get('message_id')
         user_id = data.get('user_id')
-        if self.ignore_next_removed_reaction.get(str(message_id)+str(emoji)) == user_id:
-            del self.ignore_next_removed_reaction[str(message_id)+str(emoji)]
+        if self.ignore_next_removed_reaction.get(str(message_id) + str(emoji)) == user_id:
+            del self.ignore_next_removed_reaction[str(message_id) + str(emoji)]
             return
-
 
         # check if we can find a poll label
         channel_id = data.get('channel_id')
 
         channel = self.bot.get_channel(channel_id)
-        user = await self.bot.get_user_info(user_id)  # only do this once
+        # user = await self.bot.get_user_info(user_id)  # only do this once
+
+        server_id = data.get('guild_id')
+        if server_id:
+            server = self.bot.get_server(server_id)
+            user = server.get_member(user_id)
+        else:
+            user = await self.bot.get_user_info(user_id)  # only do this once, this is rate limited
+
         if not channel:
             # discord rapidly closes dm channels by desing
             # put private channels back into the bots cache and try again
             await self.bot.start_private_message(user)
             channel = self.bot.get_channel(channel_id)
+
         message = await self.bot.get_message(channel=channel, id=message_id)
         label = None
         if message and message.embeds:
@@ -508,28 +536,22 @@ class PollControls:
         if not label:
             return
 
-        # fetch poll
         # create message object for the reaction sender, to get correct server
-        user_msg = copy.deepcopy(message)
-        user_msg.author = user
-        server = await ask_for_server(self.bot, user_msg, label)
+        if not server_id:
+            user_msg = copy.deepcopy(message)
+            user_msg.author = user
+            server = await ask_for_server(self.bot, user_msg, label)
+            server_id = server.id
 
         # this is exclusive
-
-        lock = self.get_lock(server.id)
+        lock = self.get_lock(server_id)
         async with lock:
-            # try to load poll form cache
-            p = self.bot.poll_cache.get(str(server.id) + label)
-            if not p:
-                p = await Poll.load_from_db(self.bot, server.id, label)
+            p = await Poll.load_from_db(self.bot, server_id, label)
             if not isinstance(p, Poll):
                 return
-
             if not p.anonymous:
                 # for anonymous polls we can't unvote because we need to hide reactions
-                member = server.get_member(user_id)
-                await p.unvote(member, emoji, message, lock)
-
+                await p.unvote(user, emoji, message, lock)
 
     async def do_on_reaction_add(self, data):
         # dont look at bot's own reactions
@@ -576,9 +598,7 @@ class PollControls:
         # hopefully it will scale well enough or I need a different solution
         lock = self.get_lock(server.id)
         async with lock:
-            p = self.bot.poll_cache.get(str(server.id)+label)
-            if not p:
-                p = await Poll.load_from_db(self.bot, server.id, label)
+            p = await Poll.load_from_db(self.bot, server.id, label)
             if not isinstance(p, Poll):
                 return
 
@@ -624,8 +644,9 @@ class PollControls:
                 if user.id in p.votes:
                     if p.votes[user.id]['choices'].__len__() > 0:
                         choices = ', '.join([p.options_reaction[c] for c in p.votes[user.id]['choices']])
-                embed.add_field(name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
-                                value=choices, inline=False)
+                embed.add_field(
+                    name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
+                    value=choices, inline=False)
 
                 # weight
                 if vote_rights:
@@ -646,11 +667,44 @@ class PollControls:
                 elif deadline == 0:
                     time_left = 'Until manually closed.'
                 else:
-                    time_left = str(deadline-datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
+                    time_left = str(deadline - datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
 
                 embed.add_field(name='Time left in the poll:', value=time_left, inline=False)
 
                 await self.bot.send_message(user, embed=embed)
+
+                # send current details of who currently voted for what
+                if not p.anonymous and p.votes.__len__() > 0:
+                    msg = '--------------------------------------------\n' \
+                              'CURRENT VOTES\n' \
+                              '--------------------------------------------\n'
+                    for i, o in enumerate(p.options_reaction):
+                        if not p.options_reaction_default:
+                            msg += AZ_EMOJIS[i] + " "
+                        msg += "**" +o+":**"
+                        c = 0
+                        for user_id in p.votes:
+                            member = server.get_member(user_id)
+                            if not member or i not in p.votes[user_id]['choices']:
+                                continue
+                            c += 1
+                            name = member.nick
+                            if not name:
+                                name = member.name
+                            msg += f'\n{name}'
+                            if p.votes[user_id]['weight'] != 1:
+                                msg += f' (weight: {p.votes[user_id]["weight"]})'
+                            # msg += ': ' + ', '.join([AZ_EMOJIS[c]+" "+p.options_reaction[c] for c in p.votes[user_id]['choices']])
+                            if msg.__len__() > 1500:
+                                await self.bot.send_message(user, msg)
+                                msg = ''
+                        if c == 0:
+                            msg += '\nNo votes for this option yet.'
+                        msg += '\n\n'
+
+                    if msg.__len__() > 0:
+                        await self.bot.send_message(user, msg)
+
                 return
 
             # Assume: User wants to vote with reaction
@@ -664,7 +718,7 @@ class PollControls:
             # check if we need to remove reactions (this will trigger on_reaction_remove)
             if str(channel.type) != 'private' and p.anonymous:
                 # immediately remove reaction and to be safe, remove all reactions
-                self.ignore_next_removed_reaction[str(message.id)+str(emoji)] = user_id
+                self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
                 await self.bot.remove_reaction(message, emoji, user)
 
             # order here is crucial since we can't determine if a reaction was removed by the bot or user
@@ -673,13 +727,13 @@ class PollControls:
 
             # cant do this until we figure out how to see who removed the reaction?
             # for now MC 1 is like MC x
-            # if str(channel.type) != 'private' and p.multiple_choice == 1:
-            #     # remove all other reactions
-            #     # if lock._waiters.__len__() == 0:
-            #     for r in message.reactions:
-            #         if r.emoji and r.emoji != emoji:
-            #             await self.bot.remove_reaction(message, r.emoji, user)
-            #     pass
+            if str(channel.type) != 'private' and p.multiple_choice == 1:
+                # remove all other reactions
+                # if lock._waiters.__len__() == 0:
+                for r in message.reactions:
+                    if r.emoji and r.emoji != emoji:
+                        await self.bot.remove_reaction(message, r.emoji, user)
+                pass
 
 
 def setup(bot):

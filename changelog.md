@@ -1,3 +1,18 @@
+# Changelog for Version 2.2
+
+## New features
+- Polls will now automatically activate or close and post themselves to the specified channel
+- Improved ❔ functionality: Now lists the current votes for each options
+- pm!cmd feature is enabled again with more error logging
+- Title and options now support most UTF-8 characters, meaning you can put emojis and special characters in your poll
+
+## Changes and Fixes
+- Improved performance and scalability. Should feel a lot more responsive now
+- Fixed formatting issues for closed polls
+- Export now shows server specific nickname is applicable
+- Users can no longer create polls in channels where they don't have "send message" permissions
+
+
 # Changelog for Version 2.1
 
 ## New features

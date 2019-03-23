@@ -1,3 +1,4 @@
+import asyncio
 import codecs
 import datetime
 import logging
@@ -8,8 +9,10 @@ from string import ascii_lowercase, printable
 
 import dateparser
 import pytz
+import regex
 from matplotlib import rcParams
 from matplotlib.afm import AFM
+from pytz import UnknownTimeZoneError
 from unidecode import unidecode
 
 import discord
@@ -135,7 +138,7 @@ class Poll:
         # sanitize input
         if string is None:
             raise InvalidInput
-        string = re.sub("[^{}]+".format(printable), "", string)
+        string = regex.sub("\p{C}+", "", string)
         if set(string).issubset(set(' ')):
             raise InvalidInput
         return string
@@ -738,8 +741,8 @@ class Poll:
             'duration': self.duration,
             'duration_tz': self.duration_tz,
             'time_created': self.time_created,
-            'open': await self.is_open(update_db=False),
-            'active': await self.is_active(update_db=False),
+            'open': self.open,
+            'active': self.active,
             'activation': self.activation,
             'activation_tz': self.activation_tz,
             'votes': self.votes
@@ -800,7 +803,10 @@ class Poll:
                 member = self.server.get_member(user_id)
                 if self.votes[user_id]['choices'].__len__() == 0:
                     continue
-                export += f'\n{member.name}'
+                name = member.nick
+                if not name:
+                    name = member.name
+                export += f'\n{name}'
                 if self.votes[user_id]['weight'] != 1:
                     export += f' (weight: {self.votes[user_id]["weight"]})'
                 export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[user_id]['choices']])
@@ -814,7 +820,10 @@ class Poll:
                 member = self.server.get_member(user_id)
                 if self.votes[user_id]['choices'].__len__() == 0:
                     continue
-                export += f'\n{member.name}'
+                name = member.nick
+                if not name:
+                    name = member.name
+                export += f'\n{name}'
                 if self.votes[user_id]['weight'] != 1:
                     export += f' (weight: {self.votes[user_id]["weight"]})'
                 # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[user_id]['choices']])
@@ -842,10 +851,12 @@ class Poll:
             return None
 
     async def from_dict(self, d):
+
         self.id = d['_id']
         self.server = self.bot.get_server(str(d['server_id']))
         self.channel = self.bot.get_channel(str(d['channel_id']))
-        self.author = await self.bot.get_user_info(str(d['author']))
+        # self.author = await self.bot.get_user_info(str(d['author']))
+        self.author = self.server.get_member(d['author'])
         self.name = d['name']
         self.short = d['short']
         self.anonymous = d['anonymous']
@@ -981,7 +992,7 @@ class Poll:
                     else:
                         text += f'*You have {self.multiple_choice} choices and can change them.*'
                 else:
-                    text = f'*Final Results of the Poll *'
+                    text = f'*Final Results of the Poll* '
                     if self.multiple_choice == 0:
                         text += '*(Multiple Choice).*'
                     elif self.multiple_choice == 1:
@@ -999,7 +1010,6 @@ class Poll:
         #     embed = await self.add_field_custom(name='**Options**', value=', '.join(self.get_options()), embed=embed)
 
         # embed.set_footer(text='bot is in development')
-
         return embed
 
     async def post_embed(self, destination=None):
@@ -1043,9 +1053,15 @@ class Poll:
                     tz = pytz.timezone('UTC')
                 else:
                     # choose one valid timezone with the offset
-                    tz = pytz.timezone(tz[0])
+                    try:
+                        tz = pytz.timezone(tz[0])
+                    except UnknownTimeZoneError:
+                        tz = pytz.UTC
             else:
-                tz = pytz.timezone(self.duration_tz)
+                try:
+                    tz = pytz.timezone(self.duration_tz)
+                except UnknownTimeZoneError:
+                    tz = pytz.UTC
 
             return dt.astimezone(tz)
 
@@ -1144,6 +1160,7 @@ class Poll:
             if choice in self.votes[user.id]['choices']:
                 if self.anonymous:
                     # anonymous multiple choice -> can't unreact so we toggle with react
+                    logger.warning("Unvoting, should not happen for non anon polls.")
                     await self.unvote(user, option, message, lock)
                 # refresh_poll = False
             else:
@@ -1172,21 +1189,23 @@ class Poll:
             return
 
         # commit
-        if lock._waiters.__len__() == 0:
+        #if lock._waiters.__len__() == 0:
             # updating DB, clearing cache and refresh if necessary
-            await self.save_to_db()
-            await self.bot.poll_refresh_q.put_unique_id(
-                {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
-            if self.bot.poll_cache.get(str(self.server.id) + self.short):
-                del self.bot.poll_cache[str(self.server.id) + self.short]
+        await self.save_to_db()
+            # await self.bot.poll_refresh_q.put_unique_id(
+            #     {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
+            # if self.bot.poll_cache.get(str(self.server.id) + self.short):
+            #     del self.bot.poll_cache[str(self.server.id) + self.short]
             # refresh
             # if refresh_poll:
                 # edit message if there is a real change
                 # await self.bot.edit_message(message, embed=await self.generate_embed())
                 # self.bot.poll_refresh_q.append(str(self.id))
-        else:
+        #else:
             # cache the poll until the queue is empty
-            self.bot.poll_cache[str(self.server.id)+self.short] = self
+            #self.bot.poll_cache[str(self.server.id)+self.short] = self
+        # await self.bot.edit_message(message, embed=await self.generate_embed())
+        asyncio.ensure_future(self.bot.edit_message(message, embed=await self.generate_embed()))
 
         # if refresh_poll:
         #     await self.bot.poll_refresh_q.put_unique_id({'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
@@ -1217,17 +1236,19 @@ class Poll:
         if choice != 'invalid' and choice in self.votes[user.id]['choices']:
             try:
                 self.votes[user.id]['choices'].remove(choice)
-                if lock._waiters.__len__() == 0:
-                    # updating DB, clearing cache and refreshing message
-                    await self.save_to_db()
-                    await self.bot.poll_refresh_q.put_unique_id(
-                        {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
-                    if self.bot.poll_cache.get(str(self.server.id) + self.short):
-                        del self.bot.poll_cache[str(self.server.id) + self.short]
-                    # await self.bot.edit_message(message, embed=await self.generate_embed())
-                else:
-                    # cache the poll until the queue is empty
-                    self.bot.poll_cache[str(self.server.id) + self.short] = self
+                await self.save_to_db()
+                asyncio.ensure_future(self.bot.edit_message(message, embed=await self.generate_embed()))
+                # if lock._waiters.__len__() == 0:
+                #     # updating DB, clearing cache and refreshing message
+                #     await self.save_to_db()
+                #     await self.bot.poll_refresh_q.put_unique_id(
+                #         {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
+                #     if self.bot.poll_cache.get(str(self.server.id) + self.short):
+                #         del self.bot.poll_cache[str(self.server.id) + self.short]
+                #     # await self.bot.edit_message(message, embed=await self.generate_embed())
+                # else:
+                #     # cache the poll until the queue is empty
+                #     self.bot.poll_cache[str(self.server.id) + self.short] = self
             except ValueError:
                 pass
 
