@@ -59,9 +59,10 @@ class PollControls:
                 logger.warning("Attribute Error in close_polls loop")
                 logger.exception(ae)
                 pass
-            except:
+            except Exception as ex:
                 #Never break this loop due to an error
                 logger.error("Other Error in close_polls loop")
+                logger.exception(ex)
                 pass
 
             await asyncio.sleep(30)
