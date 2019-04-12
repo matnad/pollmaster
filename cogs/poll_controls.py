@@ -475,8 +475,7 @@ class PollControls(commands.Cog):
             if result and result.get('admin_role') not in [r.name for r in member.roles] and result.get(
                     'user_role') not in [r.name for r in member.roles]:
                 pre = await get_server_pre(self.bot, server)
-                await self.bot.send_message(ctx.message.author,
-                                            'You don\'t have sufficient rights to start new polls on this server. '
+                await ctx.message.author.send('You don\'t have sufficient rights to start new polls on this server. '
                                             'A server administrator has to assign the user or admin role to you. '
                                             f'To view and set the permissions, an admin can use `{pre}userrole` and '
                                             f'`{pre}adminrole`')
@@ -692,9 +691,9 @@ class PollControls(commands.Cog):
 
                 # choices
                 choices = 'You have not voted yet.' if vote_rights else 'You can\'t vote in this poll.'
-                if user.id in p.votes:
-                    if p.votes[user.id]['choices'].__len__() > 0:
-                        choices = ', '.join([p.options_reaction[c] for c in p.votes[user.id]['choices']])
+                if str(user.id) in p.votes:
+                    if p.votes[str(user.id)]['choices'].__len__() > 0:
+                        choices = ', '.join([p.options_reaction[c] for c in p.votes[str(user.id)]['choices']])
                 embed.add_field(
                     name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
                     value=choices, inline=False)
@@ -736,15 +735,15 @@ class PollControls(commands.Cog):
                         c = 0
                         for user_id in p.votes:
                             member = server.get_member(user_id)
-                            if not member or i not in p.votes[user_id]['choices']:
+                            if not member or i not in p.votes[str(user_id)]['choices']:
                                 continue
                             c += 1
                             name = member.nick
                             if not name:
                                 name = member.name
                             msg += f'\n{name}'
-                            if p.votes[user_id]['weight'] != 1:
-                                msg += f' (weight: {p.votes[user_id]["weight"]})'
+                            if p.votes[str(user_id)]['weight'] != 1:
+                                msg += f' (weight: {p.votes[str(user_id)]["weight"]})'
                             # msg += ': ' + ', '.join([AZ_EMOJIS[c]+" "+p.options_reaction[c] for c in p.votes[user_id]['choices']])
                             if msg.__len__() > 1500:
                                 await user.send(msg)

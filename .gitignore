@@ -6,3 +6,11 @@ venv/
 
 # Tokens and Passwwords
 essentials/secrets\.py
+
+pollmaster\.log
+
+cogs/__pycache__/
+
+essentials/__pycache__/
+
+utils/__pycache__/
