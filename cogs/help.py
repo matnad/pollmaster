@@ -1,3 +1,4 @@
+import asyncio
 import logging
 
 import discord
@@ -7,37 +8,38 @@ from essentials.multi_server import get_server_pre, ask_for_server
 from essentials.settings import SETTINGS
 
 
-class Help:
+class Help(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
         self.pages = ['🏠', '🆕', '🔍', '🕹', '🛠', '💖']
 
-    async def embed_list_reaction_handler(self, page, pre, msg=None):
+    async def embed_list_reaction_handler(self, ctx, page, pre, msg=None):
         embed = self.get_help_embed(page, pre)
 
         if msg is None:
-            msg = await self.bot.say(embed=embed)
+            msg = await ctx.send(embed=embed)
             # add reactions
             for emoji in self.pages:
-                await self.bot.add_reaction(msg, emoji)
+                await msg.add_reaction(emoji)
         else:
-            await self.bot.edit_message(msg, embed=embed)
+            await msg.edit(embed=embed)
 
-        # wait for reactions (2 minutes)
-        def check(reaction, user):
-            return reaction.emoji if user != self.bot.user else False
+        # wait for reactions (3 minutes)
+        def check(rct, usr):
+            return True if usr != self.bot.user and str(rct.emoji) in self.pages and rct.message.id == msg.id else False
 
-        res = await self.bot.wait_for_reaction(emoji=self.pages, message=msg, timeout=180, check=check)
-
-        # redirect on reaction
-        if res is None:
-            await self.bot.delete_message(msg)
+        try:
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=180, check=check)
+        except asyncio.TimeoutError:
+            await msg.delete()
             return None
         else:
-            if str(res.reaction.message.channel.type) != 'private':
-                await self.bot.remove_reaction(res.reaction.message, res.reaction.emoji, res.user)
-            return res
+            if isinstance(reaction.message.channel, discord.TextChannel):
+                await reaction.message.remove_reaction(reaction.emoji, user)
+            return reaction
+
+
 
     def get_help_embed(self, page, pre):
 
@@ -202,22 +204,22 @@ class Help:
 
         return embed
 
-    @commands.command(pass_context=True)
+    @commands.command()
     async def help(self, ctx, *, topic=None):
         server = await ask_for_server(self.bot, ctx.message)
         pre = await get_server_pre(self.bot, server)
-        res = 1
-        while res is not None:
-            if res == 1:
+        rct = 1
+        while rct is not None:
+            if rct == 1:
                 page = '🏠'
                 msg = None
             else:
-                page = res.reaction.emoji
-                msg = res.reaction.message
-            res = await self.embed_list_reaction_handler(page, pre, msg)
+                page = rct.emoji
+                msg = rct.message
+            rct = await self.embed_list_reaction_handler(ctx, page, pre, msg)
             # print(res.user, res.reaction, res.reaction.emoji)
         # cleanup
-        await self.bot.delete_message(ctx.message)
+        await ctx.message.delete()
 
 
 def setup(bot):

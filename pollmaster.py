@@ -1,17 +1,17 @@
-import asyncio
 import sys
 import traceback
-import logging
+
 import aiohttp
 import discord
+import logging
 
+
+from essentials.messagecache import MessageCache
 from discord.ext import commands
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from essentials.multi_server import get_pre
 from essentials.settings import SETTINGS
-from utils.asyncio_unique_queue import UniqueQueue
-from utils.import_old_database import import_old_database
 
 bot_config = {
     'command_prefix': get_pre,
@@ -22,7 +22,7 @@ bot_config = {
     'max_messages': 15000
 }
 
-bot = commands.Bot(**bot_config)
+bot = commands.AutoShardedBot(**bot_config)
 bot.remove_command('help')
 
 # logger
@@ -50,18 +50,18 @@ for ext in extensions:
 
 @bot.event
 async def on_ready():
-    bot.owner = await bot.get_user_info(str(SETTINGS.owner_id))
+    bot.owner = await bot.fetch_user(SETTINGS.owner_id)
 
     mongo = AsyncIOMotorClient(SETTINGS.mongo_db)
     bot.db = mongo.pollmaster
     bot.session = aiohttp.ClientSession()
     print(bot.db)
-    await bot.change_presence(game=discord.Game(name=f'pm!help - v2.2'))
+    await bot.change_presence(status=discord.Game(name=f'pm!help - v2.2'))
 
     # check discord server configs
     try:
         db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
-        for server in bot.servers:
+        for server in bot.guilds:
             if server.id not in db_server_ids:
                 # create new config entry
                 await bot.db.config.update_one(
@@ -69,30 +69,20 @@ async def on_ready():
                     {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
                     upsert=True
                 )
-                # stopping migration support.
-                # try:
-                #     await import_old_database(bot, server)
-                #     print(str(server), "updated.")
-                # except:
-                #     print(str(server.id), "failed.")
+
     except:
         print("Problem verifying servers.")
 
     # cache prefixes
     bot.pre = {entry['_id']: entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
 
-    # global locks and caches for performance when voting rapidly
     bot.locks = {}
-    # bot.poll_cache = {}
-    # bot.poll_refresh_q = UniqueQueue()
-
+    bot.message_cache = MessageCache(bot)
     print("Servers verified. Bot running.")
 
 
-
-
 @bot.event
-async def on_command_error(e, ctx):
+async def on_command_error(ctx, e):
     if SETTINGS.log_errors:
         ignored_exceptions = (
             commands.MissingRequiredArgument,
@@ -122,22 +112,9 @@ async def on_command_error(e, ctx):
                             f"\n\tAuthor: <@{ctx.message.author}>",
                 timestamp=ctx.message.timestamp
             )
-            await bot.send_message(bot.owner, embed=e)
+            await ctx.send(bot.owner, embed=e)
 
         # if SETTINGS.mode == 'development':
         raise e
 
-
-@bot.event
-async def on_server_join(server):
-    result = await bot.db.config.find_one({'_id': str(server.id)})
-    if result is None:
-        await bot.db.config.update_one(
-            {'_id': str(server.id)},
-            {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
-            upsert=True
-        )
-        bot.pre[str(server.id)] = 'pm!'
-
-
-bot.run(SETTINGS.bot_token, reconnect=True)
+bot.run(SETTINGS.bot_token)

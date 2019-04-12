@@ -6,9 +6,9 @@ animals = ['frog', 'newt', 'tadpole', 'toad', 'spider', 'biddy', 'canary', 'crow
 async def generate_word(bot, server_id):
     exists = 1
     while exists is not None:
-        ad = random.sample(adjs, 2)
+        ad = random.sample(adjs, 1)
         an = random.sample(animals, 1)
-        short = ad[0].capitalize() + ad[1].capitalize() + an[0].capitalize()
-        exists = await bot.db.polls.find_one({'server_id': str(server_id), 'short': short})
+        short = ad[0].capitalize() + an[0].capitalize()
+        exists = await bot.db.polls.find_one({'server_id': server_id, 'short': short})
 
     return short

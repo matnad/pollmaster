@@ -1,0 +1,8 @@
+# IDE Folders
+\.idea/
+
+# PY VENV
+venv/
+
+# Tokens and Passwwords
+essentials/secrets\.py

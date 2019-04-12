@@ -1,4 +1,4 @@
-# Pollmaster V 2.2
+# Pollmaster V 2.3
 
 ## Overview
 
@@ -34,7 +34,7 @@ Here is how Pollmaster looks in action:
 | pm!help                | Shows an interactive help menu                     |
 | pm!new                 | Starts a new poll with all the settings            |
 | pm!quick               | Starts a new poll with just a question and options |
-| pm!show <label>        | Shows poll in a specified channel (can be different from original channel|                  |
+| pm!show <label>        | Shows poll in a specified channel (can be different from original channel) |
 | pm!prefix <new prefix> | Change the prefix for this server                  |
 | pm!userrole <any role> | Set the role that has the rights to use the bot    |
 

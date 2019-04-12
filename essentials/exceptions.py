@@ -1,5 +1,6 @@
 """Exception Classes for the Poll Wizard"""
 
+
 class StopWizard(RuntimeError):
     pass
 
