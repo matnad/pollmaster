@@ -1,4 +1,9 @@
-async def embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_prefix='', msg=None, start=0, per_page=10):
+import asyncio
+
+import discord
+
+
+async def embed_list_paginated(ctx, bot, pre, items, item_fct, base_embed, footer_prefix='', msg=None, start=0, per_page=10):
     embed = base_embed
 
     # generate list
@@ -21,27 +26,30 @@ async def embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_pre
 
     # post / edit message
     if msg is not None:
-        await bot.edit_message(msg, embed=embed)
-        if str(msg.channel.type) != 'private':
-            await bot.clear_reactions(msg)
+        await msg.edit(embed=embed)
+        if not isinstance(msg.channel, discord.abc.PrivateChannel):
+            await msg.clear_reactions()
     else:
-        msg = await bot.say(embed=embed)
+        msg = await ctx.send(embed=embed)
 
     # add reactions
     if start > 0:
-        await bot.add_reaction(msg, '⏪')
+        await msg.add_reaction('⏪')
     if items.__len__() > start+per_page:
-        await bot.add_reaction(msg, '⏩')
+        await msg.add_reaction('⏩')
 
     # wait for reactions (2 minutes)
     def check(reaction, user):
-        return reaction.emoji if user != bot.user else False
-    res = await bot.wait_for_reaction(emoji=['⏪', '⏩'], message=msg, timeout=120, check=check)
-
-    # redirect on reaction
-    if res is None:
-        return
-    elif res.reaction.emoji == '⏪' and start > 0:
-        await embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_prefix=footer_prefix, msg=msg, start=start-per_page, per_page=per_page)
-    elif res.reaction.emoji == '⏩' and items.__len__() > start+per_page:
-        await embed_list_paginated(bot, pre, items, item_fct, base_embed, footer_prefix=footer_prefix, msg=msg, start=start+per_page, per_page=per_page)
+        return True if user != bot.user and str(reaction.emoji) in ['⏪', '⏩'] and reaction.message.id == msg.id else False
+    try:
+        reaction, user = await bot.wait_for('reaction_add', timeout=120, check=check)
+    except asyncio.TimeoutError:
+        pass
+    else:
+        # redirect on reaction
+        if reaction is None:
+            return
+        elif reaction.emoji == '⏪' and start > 0:
+            await embed_list_paginated(ctx, bot, pre, items, item_fct, base_embed, footer_prefix=footer_prefix, msg=msg, start=start-per_page, per_page=per_page)
+        elif reaction.emoji == '⏩' and items.__len__() > start+per_page:
+            await embed_list_paginated(ctx, bot, pre, items, item_fct, base_embed, footer_prefix=footer_prefix, msg=msg, start=start+per_page, per_page=per_page)

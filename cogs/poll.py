@@ -4,18 +4,18 @@ import datetime
 import logging
 import os
 import re
-from uuid import uuid4
-from string import ascii_lowercase, printable
-
 import dateparser
 import pytz
 import regex
+import discord
+
+from uuid import uuid4
+from string import ascii_lowercase
 from matplotlib import rcParams
 from matplotlib.afm import AFM
 from pytz import UnknownTimeZoneError
 from unidecode import unidecode
 
-import discord
 from essentials.multi_server import get_pre
 from essentials.exceptions import *
 from essentials.settings import SETTINGS
@@ -32,8 +32,9 @@ with open(afm_fname, 'rb') as fh:
 ## A-Z Emojis for Discord
 AZ_EMOJIS = [(b'\\U0001f1a'.replace(b'a', bytes(hex(224 + (6 + i))[2:], "utf-8"))).decode("unicode-escape") for i in
              range(26)]
-class Poll:
 
+
+class Poll:
     def __init__(self, bot, ctx=None, server=None, channel=None, load=False):
 
         self.bot = bot
@@ -41,7 +42,7 @@ class Poll:
 
         if not load and ctx:
             if server is None:
-                server = ctx.message.server
+                server = ctx.message.guild
 
             if channel is None:
                 channel = ctx.message.channel
@@ -97,41 +98,45 @@ class Poll:
                 await self.save_to_db()
         return self.active
 
-    async def wizard_says(self, text, footer=True):
+    async def wizard_says(self, ctx, text, footer=True):
         embed = discord.Embed(title="Poll creation Wizard", description=text, color=SETTINGS.color)
-        if footer: embed.set_footer(text="Type `stop` to cancel the wizard.")
-        return await self.bot.say(embed=embed)
+        if footer:
+            embed.set_footer(text="Type `stop` to cancel the wizard.")
+        return await ctx.send(embed=embed)
 
     async def wizard_says_edit(self, message, text, add=False):
         if add and message.embeds.__len__() > 0:
-            text = message.embeds[0]['description'] + text
+            text = message.embeds[0].description + text
         embed = discord.Embed(title="Poll creation Wizard", description=text, color=SETTINGS.color)
         embed.set_footer(text="Type `stop` to cancel the wizard.")
-        return await self.bot.edit_message(message, embed=embed)
+        return await message.edit(embed=embed)
 
     async def add_error(self, message, error):
         text = ''
         if message.embeds.__len__() > 0:
-            text = message.embeds[0]['description'] + '\n\n:exclamation: ' + error
+            text = message.embeds[0].description + '\n\n:exclamation: ' + error
         return await self.wizard_says_edit(message, text)
 
     async def add_vaild(self, message, string):
         text = ''
         if message.embeds.__len__() > 0:
-            text = message.embeds[0]['description'] + '\n\n✅ ' + string
+            text = message.embeds[0].description + '\n\n✅ ' + string
         return await self.wizard_says_edit(message, text)
 
-    async def get_user_reply(self):
+    async def get_user_reply(self, ctx):
         """Pre-parse user input for wizard"""
-        reply = await self.bot.wait_for_message(author=self.author)
+        def check(m):
+            return m.author == self.author
+
+        reply = await self.bot.wait_for('message', check=check)
         if reply and reply.content:
             if reply.content.startswith(await get_pre(self.bot, reply)):
-                await self.wizard_says(f'You can\'t use bot commands during the Poll Creation Wizard.\n'
+                await self.wizard_says(ctx, f'You can\'t use bot commands during the Poll Creation Wizard.\n'
                                        f'Stopping the Wizard and then executing the command:\n`{reply.content}`',
                                        footer=False)
                 raise StopWizard
             elif reply.content.lower() == 'stop':
-                await self.wizard_says('Poll Wizard stopped.', footer=False)
+                await self.wizard_says(ctx, 'Poll Wizard stopped.', footer=False)
                 raise StopWizard
 
             else:
@@ -149,7 +154,7 @@ class Poll:
             raise InvalidInput
         return string
 
-    async def set_name(self, force=None):
+    async def set_name(self, ctx, force=None):
         """Set the Question / Name of the Poll."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -172,7 +177,7 @@ class Poll:
 
         text = ("**What is the question of your poll?**\n"
                 "Try to be descriptive without writing more than one sentence.")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -180,14 +185,14 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 self.name = await get_valid(reply)
                 await self.add_vaild(message, self.name)
                 break
             except InvalidInput:
                 await self.add_error(message, '**Keep the name between 3 and 200 valid characters**')
 
-    async def set_short(self, force=None):
+    async def set_short(self, ctx, force=None):
         """Set the label of the Poll."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -214,7 +219,7 @@ class Poll:
 
         text = """Great. **Now type a unique one word identifier, a label, for your poll.**
          This label will be used to refer to the poll. Keep it short and significant."""
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -222,7 +227,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 self.short = await get_valid(reply)
                 await self.add_vaild(message, self.short)
                 break
@@ -235,7 +240,7 @@ class Poll:
                                      f'**The label `{reply}` is not unique on this server. Choose a different one!**')
 
 
-    async def set_preparation(self, force=None):
+    async def set_preparation(self, ctx, force=None):
         """Set the preparation conditions for the Poll."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -278,7 +283,7 @@ class Poll:
                 "it manually. **Type `0` to activate it manually or tell me when you want to activate it** by "
                 "typing an absolute or relative date. You can specify a timezone if you want.\n"
                 "Examples: `in 2 days`, `next week CET`, `may 3rd 2019`, `9.11.2019 9pm EST` ")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -286,7 +291,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 dt = await get_valid(reply)
                 self.activation = dt
                 if self.activation == 0:
@@ -303,7 +308,7 @@ class Poll:
             except DateOutOfRange as e:
                 await self.add_error(message, f'**{e.date.strftime("%d-%b-%Y %H:%M")} is in the past.**')
 
-    async def set_anonymous(self, force=None):
+    async def set_anonymous(self, ctx, force=None):
         """Determine if poll is anonymous."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -334,7 +339,7 @@ class Poll:
                 "An anonymous poll has the following effects:\n"
                 "🔹 You will never see who voted for which option\n"
                 "🔹 Once the poll is closed, you will see who participated (but not their choice)")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -342,40 +347,14 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 self.anonymous = await get_valid(reply)
                 await self.add_vaild(message, f'{"Yes" if self.anonymous else "No"}')
                 break
             except InvalidInput:
                 await self.add_error(message, '**You can only answer with `yes` | `1` or `no` | `0`!**')
 
-
-    # async def set_reaction(self, force=None):
-    #     ''' Currently everything is reaction, this is not needed'''
-    #     if force is not None and force in [True, False]:
-    #         self.reaction = force
-    #         return
-    #     if self.stopped: return
-    #     text = """**Do you want your users to vote by adding reactions to the poll? Type `yes` or `no`.**
-    #     Reaction voting typically has the following properties:
-    #     :small_blue_diamond: Voting is quick and painless (no typing required)
-    #     :small_blue_diamond: Multiple votes are possible
-    #     :small_blue_diamond: Not suited for a large number of options
-    #     :small_blue_diamond: Not suited for long running polls"""
-    #     message = await self.wizard_says(text)
-    #
-    #     reply = ''
-    #     while reply not in ['yes', 'no']:
-    #         if reply != '':
-    #             await self.add_error(message, '**You can only answer with `yes` or `no`!**')
-    #         reply = await self.get_user_reply()
-    #         if self.stopped: break
-    #         if isinstance(reply, str): reply = reply.lower()
-    #
-    #     self.reaction = reply == 'yes'
-    #     return self.reaction
-
-    async def set_multiple_choice(self, force=None):
+    async def set_multiple_choice(self, ctx, force=None):
         """Determine if poll is multiple choice."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -406,7 +385,7 @@ class Poll:
                 "\n"
                 "If the maximum choices are reached for a voter, they have to unvote an option before being able to "
                 "vote for a different one.")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -414,7 +393,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 self.multiple_choice = await get_valid(reply)
                 await self.add_vaild(message, f'{self.multiple_choice if self.multiple_choice > 0 else "No Limit"}')
                 break
@@ -426,7 +405,7 @@ class Poll:
                 await self.add_error(message, '**You can\'t have more choices than options.**')
 
 
-    async def set_options_reaction(self, force=None):
+    async def set_options_reaction(self, ctx, force=None):
         """Set the answers / options of the Poll."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -482,7 +461,7 @@ class Poll:
                 "\n"
                 "Example for custom options:\n"
                 "**apple juice, banana ice cream, kiwi slices** ")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -490,7 +469,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 options = await get_valid(reply)
                 self.options_reaction_default = False
                 if isinstance(options, int):
@@ -510,7 +489,7 @@ class Poll:
                                      '**You need more than 1 option! Type them in a comma separated list.**')
 
 
-    async def set_roles(self, force=None):
+    async def set_roles(self, ctx, force=None):
         """Set role restrictions for the Poll."""
         async def get_valid(in_reply, roles):
             n_roles = roles.__len__()
@@ -563,7 +542,7 @@ class Poll:
                     "Type `0`, `all` or `everyone` to have no restrictions.\n"
                     "Type out the role names, separated by a comma, to restrict voting to specific roles:\n"
                     "`moderators, Editors, vips` (hint: role names are case sensitive!)\n")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -571,7 +550,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 self.roles = await get_valid(reply, roles)
                 await self.add_vaild(message, f'{", ".join(self.roles)}')
                 break
@@ -584,7 +563,7 @@ class Poll:
             except InvalidRoles as e:
                 await self.add_error(message, f'**The following roles are invalid: {e.roles}**')
 
-    async def set_weights(self, force=None):
+    async def set_weights(self, ctx, force=None):
         """Set role weights for the poll."""
         async def get_valid(in_reply, server_roles):
             if not in_reply:
@@ -626,7 +605,7 @@ class Poll:
                 "A weight for the role `moderator` of `2` for example will automatically count the votes of all the moderators twice.\n"
                 "To assign weights type the role, followed by a colon, followed by the weight like this:\n"
                 "`moderator: 2, newbie: 0.5`")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -634,7 +613,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 w_n = await get_valid(reply, self.server.roles)
                 self.weights_roles = w_n[0]
                 self.weights_numbers = w_n[1]
@@ -654,7 +633,7 @@ class Poll:
             except WrongNumberOfArguments:
                 await self.add_error(message, f'**Not every role has a weight assigned.**')
 
-    async def set_duration(self, force=None):
+    async def set_duration(self, ctx, force=None):
         """Set the duration /deadline for the Poll."""
         async def get_valid(in_reply):
             if not in_reply:
@@ -693,7 +672,7 @@ class Poll:
                 "You can specify a timezone if you want.\n"
                 "\n"
                 "Examples: `in 6 hours` or `next week CET` or `aug 15th 5:10` or `15.8.2019 11pm EST`")
-        message = await self.wizard_says(text)
+        message = await self.wizard_says(ctx, text)
 
         while True:
             try:
@@ -701,7 +680,7 @@ class Poll:
                     reply = force
                     force = None
                 else:
-                    reply = await self.get_user_reply()
+                    reply = await self.get_user_reply(ctx)
                 dt = await get_valid(reply)
                 self.duration = dt
                 if self.duration == 0:
@@ -807,15 +786,15 @@ class Poll:
 
             for user_id in self.votes:
                 member = self.server.get_member(user_id)
-                if self.votes[user_id]['choices'].__len__() == 0:
+                if self.votes[str(member.id)]['choices'].__len__() == 0:
                     continue
                 name = member.nick
                 if not name:
                     name = member.name
                 export += f'\n{name}'
-                if self.votes[user_id]['weight'] != 1:
-                    export += f' (weight: {self.votes[user_id]["weight"]})'
-                export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[user_id]['choices']])
+                if self.votes[str(member.id)]['weight'] != 1:
+                    export += f' (weight: {self.votes[str(user_id)]["weight"]})'
+                export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
             export += '\n'
         else:
             export += '--------------------------------------------\n' \
@@ -824,15 +803,15 @@ class Poll:
 
             for user_id in self.votes:
                 member = self.server.get_member(user_id)
-                if self.votes[user_id]['choices'].__len__() == 0:
+                if self.votes[str(user_id)]['choices'].__len__() == 0:
                     continue
                 name = member.nick
                 if not name:
                     name = member.name
                 export += f'\n{name}'
-                if self.votes[user_id]['weight'] != 1:
-                    export += f' (weight: {self.votes[user_id]["weight"]})'
-                # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[user_id]['choices']])
+                if self.votes[str(user_id)]['weight'] != 1:
+                    export += f' (weight: {self.votes[str(user_id)]["weight"]})'
+                # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
             export += '\n'
 
         export += ('--------------------------------------------\n'
@@ -859,11 +838,10 @@ class Poll:
     async def from_dict(self, d):
 
         self.id = d['_id']
-        self.server = self.bot.get_server(str(d['server_id']))
-        self.channel = self.bot.get_channel(str(d['channel_id']))
-        # self.author = await self.bot.get_user_info(str(d['author']))
+        self.server = self.bot.get_guild(int(d['server_id']))
+        self.channel = self.bot.get_channel(int(d['channel_id']))
         if self.server:
-            self.author = self.server.get_member(d['author'])
+            self.author = self.server.get_member(int(d['author']))
         else:
             self.author = None
         self.name = d['name']
@@ -911,7 +889,7 @@ class Poll:
 
     @staticmethod
     async def load_from_db(bot, server_id, short, ctx=None, ):
-        query = await bot.db.polls.find_one({'server_id': str(server_id), 'short': str(short)})
+        query = await bot.db.polls.find_one({'server_id': str(server_id), 'short': short})
         if query is not None:
             p = Poll(bot, ctx, load=True)
             await p.from_dict(query)
@@ -1018,34 +996,25 @@ class Poll:
         # else:
         #     embed = await self.add_field_custom(name='**Options**', value=', '.join(self.get_options()), embed=embed)
 
-        # embed.set_footer(text='bot is in development')
+        embed.set_footer(text='React with ❔ to get info. It is not a vote option.')
         return embed
 
-    async def post_embed(self, destination=None):
-        if destination is None:
-            msg = await self.bot.say(embed=await self.generate_embed())
-        else:
-            msg = await self.bot.send_message(destination=destination, embed= await self.generate_embed())
+    async def post_embed(self, destination):
+        msg = await destination.send(embed=await self.generate_embed())
         if self.reaction and await self.is_open() and await self.is_active():
             if self.options_reaction_default:
                 for r in self.options_reaction:
-                    await self.bot.add_reaction(
-                        msg,
-                        r
-                    )
-                await self.bot.add_reaction(msg, '❔')
+                    await msg.add_reaction(r)
+                await msg.add_reaction('❔')
                 return msg
             else:
                 for i, r in enumerate(self.options_reaction):
-                    await self.bot.add_reaction(
-                        msg,
-                        AZ_EMOJIS[i]
-                    )
-                await self.bot.add_reaction(msg, '❔')
+                    await msg.add_reaction(AZ_EMOJIS[i])
+                await msg.add_reaction('❔')
                 return msg
         elif not await self.is_open():
-            await self.bot.add_reaction(msg, '❔')
-            await self.bot.add_reaction(msg, '📎')
+            await msg.add_reaction('❔')
+            await msg.add_reaction('📎')
         else:
             return msg
 
@@ -1135,8 +1104,8 @@ class Poll:
     async def vote(self, user, option, message, lock):
         if not await self.is_open():
             # refresh to show closed poll
-            await self.bot.edit_message(message, embed=await self.generate_embed())
-            await self.bot.clear_reactions(message)
+            await message.edit(embed=await self.generate_embed())
+            await message.clear_reactions()
             return
         elif not await self.is_active():
             return
@@ -1153,9 +1122,9 @@ class Poll:
                 weight = max(valid_weights)
 
         if str(user.id) not in self.votes:
-            self.votes[user.id] = {'weight': weight, 'choices': []}
+            self.votes[str(user.id)] = {'weight': weight, 'choices': []}
         else:
-            self.votes[user.id]['weight'] = weight
+            self.votes[str(user.id)]['weight'] = weight
 
         if self.options_reaction_default:
             if option in self.options_reaction:
@@ -1166,23 +1135,23 @@ class Poll:
 
         if choice != 'invalid':
             # if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
-            if choice in self.votes[user.id]['choices']:
+            if choice in self.votes[str(user.id)]['choices']:
                 if self.anonymous:
                     # anonymous multiple choice -> can't unreact so we toggle with react
                     logger.warning("Unvoting, should not happen for non anon polls.")
                     await self.unvote(user, option, message, lock)
                 # refresh_poll = False
             else:
-                if self.multiple_choice > 0 and self.votes[user.id]['choices'].__len__() >= self.multiple_choice:
+                if self.multiple_choice > 0 and self.votes[str(user.id)]['choices'].__len__() >= self.multiple_choice:
                     say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
                                f'Before you can vote again, you need to unvote one of your choices.'
                     embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
                     embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
-                    await self.bot.send_message(user, embed=embed)
+                    await user.send(embed=embed)
                     # refresh_poll = False
                 else:
-                    self.votes[user.id]['choices'].append(choice)
-                    self.votes[user.id]['choices'] = list(set(self.votes[user.id]['choices']))
+                    self.votes[str(user.id)]['choices'].append(choice)
+                    self.votes[str(user.id)]['choices'] = list(set(self.votes[str(user.id)]['choices']))
             # else:
             #     if [choice] == self.votes[user.id]['choices']:
             #         # refresh_poll = False
@@ -1198,26 +1167,9 @@ class Poll:
             return
 
         # commit
-        #if lock._waiters.__len__() == 0:
-            # updating DB, clearing cache and refresh if necessary
         await self.save_to_db()
-            # await self.bot.poll_refresh_q.put_unique_id(
-            #     {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
-            # if self.bot.poll_cache.get(str(self.server.id) + self.short):
-            #     del self.bot.poll_cache[str(self.server.id) + self.short]
-            # refresh
-            # if refresh_poll:
-                # edit message if there is a real change
-                # await self.bot.edit_message(message, embed=await self.generate_embed())
-                # self.bot.poll_refresh_q.append(str(self.id))
-        #else:
-            # cache the poll until the queue is empty
-            #self.bot.poll_cache[str(self.server.id)+self.short] = self
-        # await self.bot.edit_message(message, embed=await self.generate_embed())
-        asyncio.ensure_future(self.bot.edit_message(message, embed=await self.generate_embed()))
+        asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
 
-        # if refresh_poll:
-        #     await self.bot.poll_refresh_q.put_unique_id({'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
 
 
 
@@ -1225,13 +1177,15 @@ class Poll:
     async def unvote(self, user, option, message, lock):
         if not await self.is_open():
             # refresh to show closed poll
-            await self.bot.edit_message(message, embed=await self.generate_embed())
-            await self.bot.clear_reactions(message)
+            await message.edit(embed=await self.generate_embed())
+            if not isinstance(message.channel, discord.abc.PrivateChannel):
+                await message.clear_reactions()
             return
         elif not await self.is_active():
             return
 
-        if str(user.id) not in self.votes: return
+        if str(user.id) not in self.votes:
+            return
 
         choice = 'invalid'
 
@@ -1242,24 +1196,14 @@ class Poll:
             if option in AZ_EMOJIS:
                 choice = AZ_EMOJIS.index(option)
 
-        if choice != 'invalid' and choice in self.votes[user.id]['choices']:
+        if choice != 'invalid' and choice in self.votes[str(user.id)]['choices']:
             try:
-                self.votes[user.id]['choices'].remove(choice)
+                self.votes[str(user.id)]['choices'].remove(choice)
                 await self.save_to_db()
-                asyncio.ensure_future(self.bot.edit_message(message, embed=await self.generate_embed()))
-                # if lock._waiters.__len__() == 0:
-                #     # updating DB, clearing cache and refreshing message
-                #     await self.save_to_db()
-                #     await self.bot.poll_refresh_q.put_unique_id(
-                #         {'id': self.id, 'msg': message, 'sid': self.server.id, 'label': self.short, 'lock': lock})
-                #     if self.bot.poll_cache.get(str(self.server.id) + self.short):
-                #         del self.bot.poll_cache[str(self.server.id) + self.short]
-                #     # await self.bot.edit_message(message, embed=await self.generate_embed())
-                # else:
-                #     # cache the poll until the queue is empty
-                #     self.bot.poll_cache[str(self.server.id) + self.short] = self
+                asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
             except ValueError:
                 pass
 
     async def has_required_role(self, user):
         return not set([r.name for r in user.roles]).isdisjoint(self.roles)
+
