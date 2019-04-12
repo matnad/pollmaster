@@ -117,4 +117,15 @@ async def on_command_error(ctx, e):
         # if SETTINGS.mode == 'development':
         raise e
 
+@bot.event
+async def on_server_join(server):
+    result = await bot.db.config.find_one({'_id': str(server.id)})
+    if result is None:
+        await bot.db.config.update_one(
+            {'_id': str(server.id)},
+            {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
+            upsert=True
+        )
+        bot.pre[str(server.id)] = 'pm!'
+
 bot.run(SETTINGS.bot_token)

@@ -786,9 +786,13 @@ class Poll:
 
             for user_id in self.votes:
                 member = self.server.get_member(user_id)
-                if self.votes[str(member.id)]['choices'].__len__() == 0:
+                if member and self.votes[str(member.id)]['choices'].__len__() == 0:
                     continue
-                name = member.nick
+                if not member:
+                    name = "<Deleted User>"
+                else:
+                    name = member.nick
+
                 if not name:
                     name = member.name
                 export += f'\n{name}'
@@ -803,9 +807,12 @@ class Poll:
 
             for user_id in self.votes:
                 member = self.server.get_member(user_id)
-                if self.votes[str(user_id)]['choices'].__len__() == 0:
+                if member and self.votes[str(user_id)]['choices'].__len__() == 0:
                     continue
-                name = member.nick
+                if not member:
+                    name = "<Deleted User>"
+                else:
+                    name = member.nick
                 if not name:
                     name = member.name
                 export += f'\n{name}'
