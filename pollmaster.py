@@ -118,7 +118,7 @@ async def on_command_error(ctx, e):
         raise e
 
 @bot.event
-async def on_server_join(server):
+async def on_guild_join(server):
     result = await bot.db.config.find_one({'_id': str(server.id)})
     if result is None:
         await bot.db.config.update_one(
