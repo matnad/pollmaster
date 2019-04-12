@@ -195,7 +195,7 @@ class PollControls(commands.Cog):
                 footer = f'Type {pre}show to display all polls'
                 await self.say_error(ctx, error, footer)
 
-    @commands.command(pass_context=True)
+    @commands.command()
     async def close(self, ctx, *, short=None):
         '''Close a poll. Parameter: <label>'''
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -229,7 +229,7 @@ class PollControls(commands.Cog):
                 await self.say_error(ctx, error)
                 await ctx.invoke(self.show)
 
-    @commands.command(pass_context=True)
+    @commands.command()
     async def export(self, ctx, *, short=None):
         '''Export a poll. Parameter: <label>'''
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -318,7 +318,7 @@ class PollControls(commands.Cog):
                 footer = f'Type {pre}show to display all polls'
                 await self.say_error(ctx, error, footer)
     #
-    # @commands.command(pass_context=True)
+    # @commands.command()
     # async def cmd(self, ctx, *, cmd=None):
     #     '''The old, command style way paired with the wizard.'''
     #     await self.say_embed(ctx, say_text='This command is temporarily disabled.')
@@ -419,7 +419,7 @@ class PollControls(commands.Cog):
         if poll:
             await poll.post_embed(poll.channel)
 
-    @commands.command(pass_context=True)
+    @commands.command()
     async def prepare(self, ctx, *, cmd=None):
         """Prepare a poll to use later. Parameters: <Question> (optional)"""
         server = await ask_for_server(self.bot, ctx.message)
