@@ -796,7 +796,7 @@ class Poll:
                 if not name:
                     name = member.name
                 export += f'\n{name}'
-                if self.votes[str(member.id)]['weight'] != 1:
+                if self.votes[str(user_id)]['weight'] != 1:
                     export += f' (weight: {self.votes[str(user_id)]["weight"]})'
                 export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
             export += '\n'
