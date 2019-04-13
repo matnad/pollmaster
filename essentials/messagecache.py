@@ -12,7 +12,7 @@ class MessageCache:
     def put(self, key, value: discord.Message):
         self._cache_dict[key] = value
         if self._cache_dict.__len__() % 5 == 0:
-            logger.info("cache size:", self._cache_dict.__len__())
+            logger.info("cache size: " + str(self._cache_dict.__len__()))
 
     def get(self, key):
         # Try to find it in this cache, then see if it is cached in the bots own message cache
