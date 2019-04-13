@@ -785,7 +785,7 @@ class Poll:
                       '--------------------------------------------'
 
             for user_id in self.votes:
-                member = self.server.get_member(user_id)
+                member = self.server.get_member(int(user_id))
                 if member and self.votes[str(member.id)]['choices'].__len__() == 0:
                     continue
                 if not member:
@@ -806,7 +806,7 @@ class Poll:
                       '--------------------------------------------'
 
             for user_id in self.votes:
-                member = self.server.get_member(user_id)
+                member = self.server.get_member(int(user_id))
                 if member and self.votes[str(user_id)]['choices'].__len__() == 0:
                     continue
                 if not member:
