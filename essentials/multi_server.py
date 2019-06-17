@@ -21,7 +21,7 @@ async def get_pre(bot, message):
 
 
 async def get_server_pre(bot, server):
-    '''Gets the prefix for a server.'''
+    """Gets the prefix for a server."""
     try:
         #result = await bot.db.config.find_one({'_id': str(server.id)})
         result = bot.pre[str(server.id)]
@@ -33,7 +33,7 @@ async def get_server_pre(bot, server):
 
 
 async def get_servers(bot, message, short=None):
-    '''Get best guess of relevant shared servers'''
+    """Get best guess of relevant shared servers"""
     if message.guild is None:
         list_of_shared_servers = []
         for s in bot.guilds:

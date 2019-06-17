@@ -3,7 +3,8 @@ import codecs
 import datetime
 import logging
 import os
-import re
+import random
+
 import dateparser
 import pytz
 import regex
@@ -23,13 +24,13 @@ from utils.misc import possible_timezones
 
 logger = logging.getLogger('bot')
 
-## Helvetica is the closest font to Whitney (discord uses Whitney) in afm
-## This is used to estimate text width and adjust the layout of the embeds
+# Helvetica is the closest font to Whitney (discord uses Whitney) in afm
+# This is used to estimate text width and adjust the layout of the embeds
 afm_fname = os.path.join(rcParams['datapath'], 'fonts', 'afm', 'phvr8a.afm')
 with open(afm_fname, 'rb') as fh:
     afm = AFM(fh)
 
-## A-Z Emojis for Discord
+# A-Z Emojis for Discord
 AZ_EMOJIS = [(b'\\U0001f1a'.replace(b'a', bytes(hex(224 + (6 + i))[2:], "utf-8"))).decode("unicode-escape") for i in
              range(26)]
 
@@ -57,10 +58,12 @@ class Poll:
             self.name = "Quick Poll"
             self.short = str(uuid4())[0:23]
             self.anonymous = False
+            self.hide_count = False
             self.reaction = True
             self.multiple_choice = 1
             self.options_reaction = ['yes', 'no']
             self.options_reaction_default = False
+            self.survey_flags = []
             # self.options_traditional = []
             # self.options_traditional_default = False
             self.roles = ['@everyone']
@@ -75,6 +78,18 @@ class Poll:
             self.activation = 0
             self.activation_tz = 0.0
             self.votes = {}
+
+            self.wizard_messages = []
+
+    def get_preset_options(self, number):
+        if number == 1:
+            return ['✅', '❎']
+        elif number == 2:
+            return ['👍', '🤐', '👎']
+        elif number == 3:
+            return ['😍', '👍', '🤐', '👎', '🤢']
+        elif number == 4:
+            return ['in favour', 'against', 'abstaining']
 
     async def is_open(self, update_db=True):
         if self.server is None:
@@ -102,7 +117,9 @@ class Poll:
         embed = discord.Embed(title="Poll creation Wizard", description=text, color=SETTINGS.color)
         if footer:
             embed.set_footer(text="Type `stop` to cancel the wizard.")
-        return await ctx.send(embed=embed)
+        msg = await ctx.send(embed=embed)
+        self.wizard_messages.append(msg)
+        return msg
 
     async def wizard_says_edit(self, message, text, add=False):
         if add and message.embeds.__len__() > 0:
@@ -127,9 +144,13 @@ class Poll:
         """Pre-parse user input for wizard"""
         def check(m):
             return m.author == self.author
+        try:
+            reply = await self.bot.wait_for('message', timeout=180, check=check)
+        except asyncio.TimeoutError:
+            raise StopWizard
 
-        reply = await self.bot.wait_for('message', check=check)
         if reply and reply.content:
+            self.wizard_messages.append(reply)
             if reply.content.startswith(await get_pre(self.bot, reply)):
                 await self.wizard_says(ctx, f'You can\'t use bot commands during the Poll Creation Wizard.\n'
                                        f'Stopping the Wizard and then executing the command:\n`{reply.content}`',
@@ -144,7 +165,8 @@ class Poll:
         else:
             raise InvalidInput
 
-    def sanitize_string(self, string):
+    @staticmethod
+    def sanitize_string(string):
         """Sanitize user input for wizard"""
         # sanitize input
         if string is None:
@@ -239,7 +261,6 @@ class Poll:
                 await self.add_error(message,
                                      f'**The label `{reply}` is not unique on this server. Choose a different one!**')
 
-
     async def set_preparation(self, ctx, force=None):
         """Set the preparation conditions for the Poll."""
         async def get_valid(in_reply):
@@ -268,6 +289,9 @@ class Poll:
             if dt < now:
                 raise DateOutOfRange(dt)
             return dt
+
+        if str(force) == '-1':
+            return
 
         try:
             dt = await get_valid(force)
@@ -302,7 +326,7 @@ class Poll:
                 self.active = False
                 break
             except InvalidInput:
-                await self.add_error(message, '**I could not understand that format.**')
+                await self.add_error(message, '**Specify the activation time in a format i can understand.**')
             except TypeError:
                 await self.add_error(message, '**Type Error.**')
             except DateOutOfRange as e:
@@ -404,7 +428,6 @@ class Poll:
             except OutOfRange:
                 await self.add_error(message, '**You can\'t have more choices than options.**')
 
-
     async def set_options_reaction(self, ctx, force=None):
         """Set the answers / options of the Poll."""
         async def get_valid(in_reply):
@@ -418,7 +441,7 @@ class Poll:
                     return int(split[0])
                 else:
                     raise WrongNumberOfArguments
-            elif 1 < split.__len__() <= 26:
+            elif 1 < split.__len__() <= 18:
                 split = [self.sanitize_string(o) for o in split]
                 if any([len(o) < 1 for o in split]):
                     raise InvalidInput
@@ -427,22 +450,11 @@ class Poll:
             else:
                 raise WrongNumberOfArguments
 
-        def get_preset_options(number):
-            if number == 1:
-                return ['✅', '❎']
-            elif number == 2:
-                return ['👍', '🤐', '👎']
-            elif number == 3:
-                return ['😍', '👍', '🤐', '👎', '🤢']
-            elif number == 4:
-                return ['in favour', 'against', 'abstaining']
-
-
         try:
             options = await get_valid(force)
             self.options_reaction_default = False
             if isinstance(options, int):
-                self.options_reaction = get_preset_options(options)
+                self.options_reaction = self.get_preset_options(options)
                 if options <= 3:
                     self.options_reaction_default = True
             else:
@@ -473,7 +485,7 @@ class Poll:
                 options = await get_valid(reply)
                 self.options_reaction_default = False
                 if isinstance(options, int):
-                    self.options_reaction = get_preset_options(options)
+                    self.options_reaction = self.get_preset_options(options)
                     if options <= 3:
                         self.options_reaction_default = True
                 else:
@@ -483,11 +495,115 @@ class Poll:
             except InvalidInput:
                 await self.add_error(message,
                                      '**Invalid entry. Type `1`, `2`, `3` or `4` or a comma separated list of '
-                                     'up to 26 options.**')
+                                     'up to 18 options.**')
             except WrongNumberOfArguments:
                 await self.add_error(message,
-                                     '**You need more than 1 option! Type them in a comma separated list.**')
+                                     '**You need more than 1 and less than 19 options! '
+                                     'Type them in a comma separated list.**')
 
+    async def set_survey_flags(self, ctx, force=None):
+        """Decide which Options will ask for user input."""
+        async def get_valid(in_reply):
+            if not in_reply:
+                raise InvalidInput
+            split = [r.strip() for r in in_reply.split(",")]
+
+            if not split or split.__len__() == 1 and split[0] == '0':
+                return []
+
+            if not all([r.isdigit() for r in split]):
+                raise ExpectedInteger
+
+            if any([1 > int(r) or int(r) > len(self.options_reaction) for r in split]):
+                raise OutOfRange
+
+            return [int(r)-1 for r in split]
+
+        if self.options_reaction_default:
+            return
+
+        try:
+            self.survey_flags = await get_valid(force)
+            return
+        except InputError:
+            pass
+
+        text = ("**Which options should ask the user for a custom answer?**\n"
+                "Type `0` to skip survey options.\n"
+                "If you want multiple survey options, separate the numbers with a comma.\n"
+                "\n"
+                "`0 - None (classic poll)`\n"
+                )
+        for i, option in enumerate(self.options_reaction):
+            text += f'`{i + 1} - {option}`\n'
+        text += ("\n"
+                 "If the user votes for one of these options, the bot will PM them and ask them to provide a text "
+                 "input. You can use this to do surveys or to gather feedback for example.\n")
+        message = await self.wizard_says(ctx, text)
+
+        while True:
+            try:
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply(ctx)
+                self.survey_flags = await get_valid(reply)
+                await self.add_vaild(
+                    message, f'{"None" if self.survey_flags.__len__() == 0 else ", ".join(str(f + 1) for f in self.survey_flags)}'
+                )
+                break
+            except InvalidInput:
+                await self.add_error(message, '**I can\'t read this input.**')
+            except ExpectedInteger:
+                await self.add_error(message, '**Only type positive numbers separated by a comma.**')
+            except OutOfRange:
+                await self.add_error(message, '**Only type numbers you can see in the list.**')
+
+    async def set_hide_vote_count(self, ctx, force=None):
+        """Determine the live vote count is hidden or shown."""
+        async def get_valid(in_reply):
+            if not in_reply:
+                raise InvalidInput
+            is_true = ['yes', '1']
+            is_false = ['no', '0']
+            in_reply = self.sanitize_string(in_reply)
+            if not in_reply:
+                raise InvalidInput
+            elif in_reply.lower() in is_true:
+                return True
+            elif in_reply.lower() in is_false:
+                return False
+            else:
+                raise InvalidInput
+
+        try:
+            self.hide_count = await get_valid(force)
+            return
+        except InputError:
+            pass
+
+        text = ("**Do you want to hide the live vote count?**\n"
+                "\n"
+                "`0 - No, show it (Default)`\n"
+                "`1  - Yes, hide it`\n"
+                "\n"
+                "You will still be able to see the vote count once the poll is closed. This settings will just hide "
+                "the vote count while the poll is active.")
+        message = await self.wizard_says(ctx, text)
+
+        while True:
+            try:
+                if force:
+                    reply = force
+                    force = None
+                else:
+                    reply = await self.get_user_reply(ctx)
+                self.hide_count = await get_valid(reply)
+                await self.add_vaild(message, f'{"Yes" if self.hide_count else "No"}')
+                break
+            except InvalidInput:
+                await self.add_error(message, '**You can only answer with `yes` | `1` or `no` | `0`!**')
 
     async def set_roles(self, ctx, force=None):
         """Set role restrictions for the Poll."""
@@ -500,7 +616,7 @@ class Poll:
             if split.__len__() == 1 and split[0] in ['0', 'all', 'everyone']:
                 return ['@everyone']
 
-            if n_roles <= 20 and force is None:
+            if n_roles <= 20 and not force:
                 if not all([r.isdigit() for r in split]):
                     raise ExpectedInteger
                 elif any([int(r) > n_roles for r in split]):
@@ -614,6 +730,7 @@ class Poll:
                     force = None
                 else:
                     reply = await self.get_user_reply(ctx)
+                print(reply)
                 w_n = await get_valid(reply, self.server.roles)
                 self.weights_roles = w_n[0]
                 self.weights_numbers = w_n[1]
@@ -690,7 +807,7 @@ class Poll:
                     await self.add_vaild(message, self.duration.strftime('%d-%b-%Y %H:%M %Z'))
                 break
             except InvalidInput:
-                await self.add_error(message, '**I could not understand that format.**')
+                await self.add_error(message, '**Specify the deadline in a format I can understand.**')
             except TypeError:
                 await self.add_error(message, '**Type Error.**')
             except DateOutOfRange as e:
@@ -698,6 +815,83 @@ class Poll:
 
     def finalize(self):
         self.time_created = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+
+    async def clean_up(self, channel):
+        if isinstance(channel, discord.TextChannel):
+            await channel.delete_messages(self.wizard_messages)
+
+    async def ask_for_input_DM(self, user, title, text):
+        embed = discord.Embed(title=title, description=text, color=SETTINGS.color)
+        embed.set_footer(text='You can answer anywhere.')
+        message = await user.send(embed=embed)
+
+        def check(m):
+            return m.author == user
+
+        try:
+            reply = await self.bot.wait_for('message', timeout=15, check=check)
+            if reply and reply.content:
+                reply = reply.content
+            else:
+                return None
+        except asyncio.TimeoutError:
+            if message.embeds.__len__() > 0:
+                embed.description = embed.description + '\n\n:exclamation: Request timed out. Vote was counted, ' \
+                                                        'but no custom answer recorded.'
+                await message.edit(embed=embed)
+            return None
+
+        try:
+            reply = self.sanitize_string(reply)
+        except InvalidInput:
+            embed = discord.Embed(title=title,
+                                  description="Invalid Input. To try again, un-vote and re-vote the option.",
+                                  color=SETTINGS.color
+                                  )
+            await user.send(embed=embed)
+
+        if message.embeds.__len__() > 0:
+            embed.description = embed.description + '\n\n✅ ' + reply
+            await message.edit(embed=embed)
+
+        return reply
+
+    def to_command(self):
+        # make new label by increasing a counter at the end
+        try:
+            new_nr = int(self.short[-1]) + 1
+            new_label = self.short[:-1] + str(new_nr)
+        except ValueError:
+            new_label = self.short + "2"
+
+        cmd = "cmd"
+
+        cmd += " -q \"" + self.name + "\""
+        cmd += " -l \"" + new_label + "\""
+        if self.anonymous:
+            cmd += " -a"
+
+        if self.options_reaction_default:
+            for i in range(1, 5):
+                if self.get_preset_options(i) == self.options_reaction:
+                    cmd += " -o \"" + str(i) + "\""
+        else:
+            cmd += " -o \"" + ", ".join(self.options_reaction) + "\""
+
+        cmd += " -sf \"" + ", ".join([str(x+1) for x in self.survey_flags]) + "\""
+        cmd += " -mc \"" + str(self.multiple_choice) + "\""
+        if self.hide_count:
+            cmd += " -h"
+        if self.roles != ["@everyone"]:
+            cmd += " -r \"" + ", ".join(self.roles) + "\""
+        if not self.active:
+            cmd += " -p \"specify activation time\""
+        if self.duration == 0:
+            cmd += " -d \"0\""
+        else:
+            cmd += " -d \"specify deadline\""
+
+        return cmd
 
     async def to_dict(self):
         if self.channel is None:
@@ -715,11 +909,13 @@ class Poll:
             'name': self.name,
             'short': self.short,
             'anonymous': self.anonymous,
+            'hide_count': self.hide_count,
             'reaction': self.reaction,
             'multiple_choice': self.multiple_choice,
             'options_reaction': self.options_reaction,
             'reaction_default': self.options_reaction_default,
             #'options_traditional': self.options_traditional,
+            'survey_flags': self.survey_flags,
             'roles': self.roles,
             'weights_roles': self.weights_roles,
             'weights_numbers': self.weights_numbers,
@@ -766,7 +962,7 @@ class Poll:
                   f'Question / Name: {self.name}\n'
                   f'Label: {self.short}\n'
                   f'Anonymous: {"Yes" if self.anonymous else "No"}\n'
-                  f'Multiple choice: {"Yes" if self.multiple_choice else "No"}\n'
+                  f'# Choices: {"Multiple" if self.multiple_choice == 0 else self.multiple_choice}\n'
                   f'Answer options: {", ".join(self.options_reaction)}\n'
                   f'Allowed roles: {", ".join(self.roles) if self.roles.__len__() > 0 else "@everyone"}\n'
                   f'Weights for roles: {weight_str}\n'
@@ -795,10 +991,21 @@ class Poll:
 
                 if not name:
                     name = member.name
-                export += f'\n{name}'
+                export += f'\n{name}: '
                 if self.votes[str(user_id)]['weight'] != 1:
                     export += f' (weight: {self.votes[str(user_id)]["weight"]})'
-                export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
+                # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
+                choice_text_list = []
+                for choice in self.votes[str(user_id)]['choices']:
+                    choice_text = self.options_reaction[choice]
+                    if choice in self.survey_flags:
+                        choice_text += " ("\
+                                  + self.votes[str(user_id)]["answers"][self.survey_flags.index(choice)] \
+                                  + ") "
+                    choice_text_list.append(choice_text)
+                if choice_text_list:
+                    export += ', '.join(choice_text_list)
+
             export += '\n'
         else:
             export += '--------------------------------------------\n' \
@@ -820,6 +1027,28 @@ class Poll:
                     export += f' (weight: {self.votes[str(user_id)]["weight"]})'
                 # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
             export += '\n'
+
+            if self.survey_flags.__len__() > 0:
+                export += '--------------------------------------------\n' \
+                          'CUSTOM ANSWERS (RANDOM ORDER)\n' \
+                          '--------------------------------------------'
+                for i, o in enumerate(self.options_reaction):
+                    if i not in self.survey_flags:
+                        continue
+                    custom_answers = []
+                    for user_id in self.votes:
+                        if i in self.votes[str(user_id)]["choices"]:
+                            custom_answers.append(f'\n{self.votes[str(user_id)]["answers"][self.survey_flags.index(i)]}')
+
+                    export += "\n" + o + ":"
+                    if custom_answers.__len__() > 0:
+                        random.shuffle(custom_answers)  # randomize answers per question
+                        for answer in custom_answers:
+                            export += answer
+                            export += '\n'
+                    else:
+                        export += "No custom answers were submitted."
+                        export += '\n'
 
         export += ('--------------------------------------------\n'
                    'BOT DETAILS\n'
@@ -854,6 +1083,13 @@ class Poll:
         self.name = d['name']
         self.short = d['short']
         self.anonymous = d['anonymous']
+
+        # backwards compatibility
+        if 'hide_count' in d.keys():
+            self.hide_count = d['hide_count']
+        else:
+            self.hide_count = False
+
         self.reaction = d['reaction']
 
         # backwards compatibility for multiple choice
@@ -872,6 +1108,13 @@ class Poll:
         self.options_reaction = d['options_reaction']
         self.options_reaction_default = d['reaction_default']
         # self.options_traditional = d['options_traditional']
+
+        # backwards compatibility
+        if 'survey_flags' in d.keys():
+            self.survey_flags = d['survey_flags']
+        else:
+            self.survey_flags = []
+
         self.roles = d['roles']
         self.weights_roles = d['weights_roles']
         self.weights_numbers = d['weights_numbers']
@@ -945,18 +1188,20 @@ class Poll:
 
         embed = await self.add_field_custom(name='**Poll Question**', value=self.name, embed=embed)
 
-        embed = await self.add_field_custom(name='**Roles**', value=', '.join(self.roles), embed=embed)
-        if len(self.weights_roles) > 0:
-            weights = []
-            for r, n in zip(self.weights_roles, self.weights_numbers):
-                weights.append(f'{r}: {n}')
-            embed = await self.add_field_custom(name='**Weights**', value=', '.join(weights), embed=embed)
+        if self.roles != ['@everyone']:
+            embed = await self.add_field_custom(name='**Roles**', value=', '.join(self.roles), embed=embed)
+            if len(self.weights_roles) > 0:
+                weights = []
+                for r, n in zip(self.weights_roles, self.weights_numbers):
+                    weights.append(f'{r}: {n}')
+                embed = await self.add_field_custom(name='**Weights**', value=', '.join(weights), embed=embed)
 
         embed = await self.add_field_custom(name='**Anonymous**', value=self.anonymous, embed=embed)
 
-        # embed = await self.add_field_custom(name='**Multiple Choice**', value=self.multiple_choice, embed=embed)
-        embed = await self.add_field_custom(name='**Deadline**', value=await self.get_poll_status(), embed=embed)
-        embed = await self.add_field_custom(name='**Author**', value=self.author.name, embed=embed)
+        if self.duration != 0:
+            embed = await self.add_field_custom(name='**Deadline**', value=await self.get_poll_status(), embed=embed)
+
+        # embed = await self.add_field_custom(name='**Author**', value=self.author.name, embed=embed)
 
         if self.reaction:
             if self.options_reaction_default:
@@ -976,34 +1221,47 @@ class Poll:
                     vote_display.append(f'{r} {self.count_votes(i)}')
                 embed = await self.add_field_custom(name=text, value=' '.join(vote_display), embed=embed)
             else:
-                embed.add_field(name='\u200b', value='\u200b', inline=False)
+                # embed.add_field(name='\u200b', value='\u200b', inline=False)
                 if await self.is_open():
-                    text = f'*Vote by adding reactions to the poll*. '
+                    head = ""
                     if self.multiple_choice == 0:
-                        text += '*You can vote for multiple options.*'
+                        head += 'You can vote for multiple options:'
                     elif self.multiple_choice == 1:
-                        text += '*You have 1 vote, but can change it.*'
+                        head += 'You have 1 vote:'
                     else:
-                        text += f'*You have {self.multiple_choice} choices and can change them.*'
+                        head += f'You can vote for {self.multiple_choice} options:'
                 else:
-                    text = f'*Final Results of the Poll* '
+                    head = f'Final Results of the Poll '
                     if self.multiple_choice == 0:
-                        text += '*(Multiple Choice).*'
+                        head += '(Multiple Choice):'
                     elif self.multiple_choice == 1:
-                        text += '*(Single Choice).*'
+                        head += '(Single Choice):'
                     else:
-                        text += f'*(With up to {self.multiple_choice} choices).*'
-                embed = await self.add_field_custom(name='**Options**', value=text, embed=embed)
+                        head += f'(With up to {self.multiple_choice} choices):'
+                # embed = await self.add_field_custom(name='**Options**', value=text, embed=embed)
+                options_text = '**' + head + '**\n'
                 for i, r in enumerate(self.options_reaction):
-                    embed = await self.add_field_custom(
-                        name=f':regional_indicator_{ascii_lowercase[i]}: {self.count_votes(i)}',
-                        value=r,
-                        embed=embed
-                    )
+                    custom_icon = ''
+                    if i in self.survey_flags:
+                        custom_icon = '🖊'
+                    options_text += f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {r}'
+                    if self.hide_count and self.open:
+                        options_text += '\n'
+                    else:
+                        options_text += f' **- {self.count_votes(i)} Votes**\n'
+                    # embed = await self.add_field_custom(
+                    #     name=f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {self.count_votes(i)}',
+                    #     value=r,
+                    #     embed=embed
+                    # )
+                embed.add_field(name='\u200b', value=options_text, inline=False)
+
         # else:
         #     embed = await self.add_field_custom(name='**Options**', value=', '.join(self.get_options()), embed=embed)
-
-        embed.set_footer(text='React with ❔ to get info. It is not a vote option.')
+        custom_text = ""
+        if len(self.survey_flags) > 0:
+            custom_text = " 🖊 next to an option means you can submit a custom answer."
+        embed.set_footer(text='React with ❔ to get info. It is not a vote option.' + custom_text)
         return embed
 
     async def post_embed(self, destination):
@@ -1129,7 +1387,7 @@ class Poll:
                 weight = max(valid_weights)
 
         if str(user.id) not in self.votes:
-            self.votes[str(user.id)] = {'weight': weight, 'choices': []}
+            self.votes[str(user.id)] = {'weight': weight, 'choices': [], 'answers': []}
         else:
             self.votes[str(user.id)]['weight'] = weight
 
@@ -1157,6 +1415,20 @@ class Poll:
                     await user.send(embed=embed)
                     # refresh_poll = False
                 else:
+                    if choice in self.survey_flags:
+                        if len(self.votes[str(user.id)]['answers']) != len(self.survey_flags):
+                            self.votes[str(user.id)]['answers'] = ['' for i in range(len(self.survey_flags))]
+                        custom_input = await self.ask_for_input_DM(
+                            user,
+                            "Custom Answer",
+                            "For this vote option you can provide a custom reply. "
+                            "Note that everyone will be able to see the answer. If you don't want to provide a "
+                            "custom answer, type \"-\""
+                        )
+                        if not custom_input or custom_input.lower() == "-":
+                            custom_input = "No Answer"
+                        self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = custom_input
+
                     self.votes[str(user.id)]['choices'].append(choice)
                     self.votes[str(user.id)]['choices'] = list(set(self.votes[str(user.id)]['choices']))
             # else:
@@ -1175,11 +1447,8 @@ class Poll:
 
         # commit
         await self.save_to_db()
-        asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
-
-
-
-
+        if not self.hide_count:
+            asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
 
     async def unvote(self, user, option, message, lock):
         if not await self.is_open():
@@ -1205,9 +1474,12 @@ class Poll:
 
         if choice != 'invalid' and choice in self.votes[str(user.id)]['choices']:
             try:
+                if choice in self.survey_flags and len(self.votes[str(user.id)]['answers']) == len(self.survey_flags):
+                    self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = ''
                 self.votes[str(user.id)]['choices'].remove(choice)
                 await self.save_to_db()
-                asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
+                if not self.hide_count:
+                    asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
             except ValueError:
                 pass
 

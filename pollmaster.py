@@ -62,7 +62,7 @@ async def on_ready():
     try:
         db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
         for server in bot.guilds:
-            if server.id not in db_server_ids:
+            if str(server.id) not in db_server_ids:
                 # create new config entry
                 await bot.db.config.update_one(
                     {'_id': str(server.id)},

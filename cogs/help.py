@@ -51,7 +51,7 @@ class Help(commands.Cog):
         if page == '🏠':
             ## POLL CREATION SHORT
             embed.add_field(name='🆕 Making New Polls',
-                            value=f'`{pre}quick` | `{pre}new` | `{pre}prepare` | `{pre}cmd <args>`', inline=False)
+                            value=f'`{pre}quick` | `{pre}new` | `{pre}advanced` | `{pre}prepare` | `{pre}cmd <args>`', inline=False)
             # embed.add_field(name='Commands', value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
             # embed.add_field(name='Arguments', value=f'Arguments: `<poll question>` (optional)', inline=False)
             # embed.add_field(name='Examples', value=f'Examples: `{pre}new` | `{pre}quick What is the greenest color?`',
@@ -221,6 +221,48 @@ class Help(commands.Cog):
         # cleanup
         await ctx.message.delete()
 
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.content.startswith("@mention "):
+            channel = message.channel
+            if not isinstance(channel, discord.TextChannel):
+                await channel.send("@mention can only be used in a server text channel.")
+                return
+
+            guild = message.guild
+            if not guild:
+                await channel.send("Could not determine your server.")
+                return
+
+            tag = message.content.split()[1].lower()
+            if tag == "prefix":
+                pre = await get_server_pre(self.bot, guild)
+                # await channel.send(f'The prefix for this server/channel is: \n {pre} \n To change it type: \n'
+                #                    f'{pre}prefix <new_prefix>')
+                await channel.send(pre)
+
+        elif message.content == "@debug":
+            channel = message.channel
+            if not isinstance(channel, discord.TextChannel):
+                await channel.send("@debug can only be used in a server text channel.")
+                return
+
+            guild = message.guild
+            if not guild:
+                await channel.send("Could not determine your server.")
+                return
+
+            status_msg = ''
+
+            permissions = channel.permissions_for(guild.me)
+            if not permissions.send_messages:
+                await message.author.send(f'I don\'t have permission to send text messages in channel {channel} '
+                                          f'on server {guild}')
+                return
+
+            status_msg += f' ✅ Sending messages\n'
+
+            await channel.send(status_msg)
 
 def setup(bot):
     global logger
