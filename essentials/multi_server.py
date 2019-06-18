@@ -148,7 +148,7 @@ async def ask_for_channel(ctx, bot, server, message):
         def check(m):
             return message.author.id == m.author.id
         try:
-            reply = await bot.wait_for('message', timeout=60)
+            reply = await bot.wait_for('message', timeout=60, check=check)
         except asyncio.TimeoutError:
             pass
         else:

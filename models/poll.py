@@ -829,7 +829,7 @@ class Poll:
             return m.author == user
 
         try:
-            reply = await self.bot.wait_for('message', timeout=15, check=check)
+            reply = await self.bot.wait_for('message', timeout=120, check=check)
             if reply and reply.content:
                 reply = reply.content
             else:
@@ -878,7 +878,9 @@ class Poll:
         else:
             cmd += " -o \"" + ", ".join(self.options_reaction) + "\""
 
-        cmd += " -sf \"" + ", ".join([str(x+1) for x in self.survey_flags]) + "\""
+        if self.survey_flags:
+            cmd += " -sf \"" + ", ".join([str(x+1) for x in self.survey_flags]) + "\""
+
         cmd += " -mc \"" + str(self.multiple_choice) + "\""
         if self.hide_count:
             cmd += " -h"
@@ -1408,8 +1410,23 @@ class Poll:
                 # refresh_poll = False
             else:
                 if self.multiple_choice > 0 and self.votes[str(user.id)]['choices'].__len__() >= self.multiple_choice:
+                    # # auto unvote for single choice non anonymous
+                    # if self.votes[str(user.id)]['choices'].__len__() == 1 and not self.anonymous:
+                    #     prev_choice = self.votes[str(user.id)]['choices'][0]
+                    #     if self.options_reaction_default:
+                    #         emoji = self.options_reaction[prev_choice]
+                    #     else:
+                    #         emoji = AZ_EMOJIS[prev_choice]
+                    #     await message.remove_reaction(emoji, user)
+                    # else:
                     say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
-                               f'Before you can vote again, you need to unvote one of your choices.'
+                               f'Before you can vote again, you need to unvote one of your choices.\n' \
+                               f'Your current choices are:\n'
+                    for c in self.votes[str(user.id)]['choices']:
+                        if self.options_reaction_default:
+                            say_text += f'{self.options_reaction[c]}\n'
+                        else:
+                            say_text += f'{AZ_EMOJIS[c]} {self.options_reaction[c]}\n'
                     embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
                     embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
                     await user.send(embed=embed)

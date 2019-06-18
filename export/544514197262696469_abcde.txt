@@ -1,0 +1,38 @@
+--------------------------------------------
+POLLMASTER DISCORD EXPORT
+--------------------------------------------
+Server name (ID): Pollmaster HQ (544514197262696469)
+Owner of the poll: Newti
+Time of creation: 24-Apr-2019 07:51 
+--------------------------------------------
+POLL SETTINGS
+--------------------------------------------
+Question / Name: Abcde
+Label: abcde
+Anonymous: No
+# Choices: Multiple
+Answer options: abc, def, ghi, jkl
+Allowed roles: @everyone
+Weights for roles: No weights
+Deadline: 24-Apr-2019 08:51 GMT
+--------------------------------------------
+POLL RESULTS
+--------------------------------------------
+Number of participants: 2
+Raw results: abc: 2, def: 2, ghi: 1, jkl: 1
+Weighted results: abc: 2, def: 2, ghi: 1, jkl: 1
+Winning options: abc, def with 2 votes
+--------------------------------------------
+DETAILED POLL RESULTS
+--------------------------------------------
+Newti: abc, def, ghi, jkl
+Page of the Reach: abc, def
+--------------------------------------------
+BOT DETAILS
+--------------------------------------------
+Creator: Newti#0654
+Link to invite, vote for or support Pollmaster:
+https://discordbots.org/bot/444514223075360800
+--------------------------------------------
+END OF FILE
+--------------------------------------------

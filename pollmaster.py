@@ -43,7 +43,7 @@ ch.setFormatter(formatter)
 logger.addHandler(fh)
 logger.addHandler(ch)
 
-extensions = ['cogs.config', 'cogs.poll_controls', 'cogs.help', 'cogs.db_api']
+extensions = ['cogs.config', 'cogs.poll_controls', 'cogs.help', 'cogs.db_api', 'cogs.admin']
 for ext in extensions:
     bot.load_extension(ext)
 
@@ -56,7 +56,6 @@ async def on_ready():
     bot.db = mongo.pollmaster
     bot.session = aiohttp.ClientSession()
     print(bot.db)
-    await bot.change_presence(status=discord.Game(name=f'pm!help - v2.2'))
 
     # check discord server configs
     try:
@@ -78,11 +77,19 @@ async def on_ready():
 
     bot.locks = {}
     bot.message_cache = MessageCache(bot)
-    print("Servers verified. Bot running.")
 
+    game = discord.Game("Democracy 4")
+    await bot.change_presence(status=discord.Status.online, activity=game)
+
+    print("Servers verified. Bot running.")
 
 @bot.event
 async def on_command_error(ctx, e):
+
+    if ctx.cog.qualified_name == "Admin":
+        # Admin cog handles the errors locally
+        return
+
     if SETTINGS.log_errors:
         ignored_exceptions = (
             commands.MissingRequiredArgument,
@@ -96,7 +103,7 @@ async def on_command_error(ctx, e):
 
         if isinstance(e, ignored_exceptions):
             # log warnings
-            logger.warning(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
+            # logger.warning(f'{type(e).__name__}: {e}\n{"".join(traceback.format_tb(e.__traceback__))}')
             return
 
         # log error
@@ -116,6 +123,7 @@ async def on_command_error(ctx, e):
 
         # if SETTINGS.mode == 'development':
         raise e
+
 
 @bot.event
 async def on_guild_join(server):

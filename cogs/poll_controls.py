@@ -518,6 +518,7 @@ class PollControls(commands.Cog):
             await poll.set_short(ctx)
             await poll.set_anonymous(ctx)
             await poll.set_options_reaction(ctx)
+            await poll.set_survey_flags(ctx, force='0')
             await poll.set_multiple_choice(ctx)
             await poll.set_hide_vote_count(ctx, force='no')
             await poll.set_roles(ctx, force='all')

@@ -12,11 +12,10 @@ class Help(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.pages = ['🏠', '🆕', '🔍', '🕹', '🛠', '💖']
+        self.pages = ['🏠', '🆕', '🔍', '🕹', '🛠', '❔', '💖']
 
     async def embed_list_reaction_handler(self, ctx, page, pre, msg=None):
         embed = self.get_help_embed(page, pre)
-
         if msg is None:
             msg = await ctx.send(embed=embed)
             # add reactions
@@ -39,8 +38,6 @@ class Help(commands.Cog):
                 await reaction.message.remove_reaction(reaction.emoji, user)
             return reaction
 
-
-
     def get_help_embed(self, page, pre):
 
         title = f' Pollmaster Help - React with an emoji to learn more about a topic!'
@@ -49,9 +46,10 @@ class Help(commands.Cog):
         embed.set_footer(text='Use reactions to navigate the help. This message will self-destruct in 3 minutes.')
 
         if page == '🏠':
-            ## POLL CREATION SHORT
+            # POLL CREATION SHORT
             embed.add_field(name='🆕 Making New Polls',
-                            value=f'`{pre}quick` | `{pre}new` | `{pre}advanced` | `{pre}prepare` | `{pre}cmd <args>`', inline=False)
+                            value=f'`{pre}quick` | `{pre}new` | `{pre}advanced` | `{pre}prepare` | `{pre}cmd <args>`',
+                            inline=False)
             # embed.add_field(name='Commands', value=f'`{pre}quick` | `{pre}new` | `{pre}prepared`', inline=False)
             # embed.add_field(name='Arguments', value=f'Arguments: `<poll question>` (optional)', inline=False)
             # embed.add_field(name='Examples', value=f'Examples: `{pre}new` | `{pre}quick What is the greenest color?`',
@@ -59,63 +57,72 @@ class Help(commands.Cog):
 
             ## POLL CONTROLS
             embed.add_field(name='🔍 Show Polls',
-                            value=f'`{pre}show (label)`', inline=False)
+                            value=f'`{pre}show` | `{pre}show <label>` | `{pre}show <category>`', inline=False)
             # embed.add_field(name='Command', value=f'`{pre}show (label)`', inline=False)
             # embed.add_field(name='Arguments', value=f'Arguments: `open` (default) | `closed` | `prepared` | '
             #                                         f'`<poll_label>` (optional)', inline=False)
             # embed.add_field(name='Examples', value=f'Examples: `{pre}show` | `{pre}show closed` | `{pre}show mascot`',
             #                 inline=False)
 
-            ## POLL CONTROLS
+            # POLL CONTROLS
             embed.add_field(name='🕹 Poll Controls',
-                            value=f'`{pre}close` | `{pre}export` | `{pre}delete` | `{pre}activate` ', inline=False)
+                            value=f'`{pre}copy` | `{pre}close` | `{pre}export` | `{pre}delete` | `{pre}activate` ',
+                            inline=False)
             # embed.add_field(name='Commands', value=f'`{pre}close` | `{pre}export` | `{pre}delete` | `{pre}activate` ',
             #                 inline=False)
             # embed.add_field(name='Arguments', value=f'Arguments: <poll_label> (required)', inline=False)
             # embed.add_field(name='Examples', value=f'Examples: `{pre}close mascot` | `{pre}export proposal`',
             #                 inline=False)
 
-            ## POLL CONTROLS
+            # POLL CONTROLS
             embed.add_field(name='🛠 Configuration',
-                            value=f'`{pre}userrole (role)` | `{pre}adminrole (role)` | `{pre}prefix <new_prefix>` ',
+                            value=f'`{pre}userrole [role]` | `{pre}adminrole [role]` | `{pre}prefix <new_prefix>` ',
                             inline=False
                             )
-            # embed.add_field(name='Commands',
-            #                 value=f'`{pre}userrole <role>` | `{pre}adminrole <role>` | `{pre}prefix <new_prefix>` ',
-            #                 inline=False)
 
-            ## ABOUT
+            # DEBUGGING
+            embed.add_field(name='❔ Debugging',
+                            value=f'`@debug` | `@mention` | `@mention <tag>` ',
+                            inline=False
+                            )
+            # ABOUT
             embed.add_field(name='💖 About Pollmaster',
                             value='More infos about Pollmaster, the developer, where to go for further help and how you can support us.',
                             inline=False)
 
         elif page == '🆕':
             embed.add_field(name='🆕 Making New Polls',
-                            value='There are three ways to create a new poll. For all three commands you can either just '
-                                  'type the command or type the command followed by the question to skip that first step.'
-                                  'Your Members need the <admin> or <user> role to use these commands. More in 🛠 Configuration.',
+                            value='There are four ways to create a new poll. For all the commands you can either just '
+                                  'type the command or type the command followed by the question to skip the first step.'
+                                  'Your Members need the <admin> or <user> role to use these commands. '
+                                  'More on user rights in 🛠 Configuration.',
                             inline=False)
-            embed.add_field(name=f'🔹 **Quick Poll:** `{pre}quick <poll question>` (optional)',
+            embed.add_field(name=f'🔹 **Quick Poll:** `{pre}quick`',
                             value='If you just need a quick poll, this is the way to go. All you have to specify is the '
                                   'question and your answers; the rest will be set to default values.',
                             inline=False)
-            embed.add_field(name=f'🔹 **All Features:** `{pre}new <poll question>` (optional)',
-                            value='This command gives you full control over your poll. A step by step wizard will guide '
+            embed.add_field(name=f'🔹 **Basic Poll:** `{pre}new`',
+                            value='This command gives control over the most common settings. A step by step wizard will guide '
                                   'you through the process and you can specify options such as Multiple Choice, '
-                                  'Anonymous Voting, Role Restriction, Role Weights and Deadline.',
+                                  'Anonymous Voting and Deadline.',
                             inline=False)
-            embed.add_field(name=f'🔹 **Prepare and Schedule:** `{pre}prepare <poll question>` (optional)',
-                            value=f'Similar to `{pre}new`, this gives you all the options. But additionally, the poll will '
+            embed.add_field(name=f'🔹 **Advanced Poll:** `{pre}advanced`',
+                            value='This command gives you full control over your poll. A step by step wizard will guide '
+                                  'you through the process and you can specify additional options such as Hide Vote Count, '
+                                  'Role Restrictions, Role Weights or Custom Write-In Answers (Survey Flags).',
+                            inline=False)
+            embed.add_field(name=f'🔹 **Prepare and Schedule:** `{pre}prepare`',
+                            value=f'Similar to `{pre}advanced`, this gives you all the options. But additionally, the poll will '
                                   'be set to \'inactive\'. You can specify if the poll should activate at a certain time '
                                   f'and/or if you would like to manually `{pre}activate` it. '
                                   'Perfect if you are preparing for a team meeting!',
                             inline=False)
-            embed.add_field(name=f'🔹 **-Advanced- Commandline:** `{pre}cmd <args>`',
+            embed.add_field(name=f'🔹 **-Advanced- Commandline:** `{pre}cmd <arguments>`',
                             value=f'For the full syntax type `{pre}cmd help`\n'
                                   f'Similar to version 1 of the bot, with this command you can create a poll in one message. '
                                   f'Pass all the options you need via command line arguments, the rest will be set to '
                                   f'default values. The wizard will step in for invalid arguments.\n'
-                                  f'Example: `{pre}cmd -q "Which colors?" -l colors -o "green, blue, red" -mc -a`',
+                                  f'Example: `{pre}cmd -q "Which colors?" -l colors -o "green, blue, red" -h -a`',
                             inline=False)
 
         elif page == '🔍':
@@ -137,8 +144,14 @@ class Help(commands.Cog):
                             inline=False)
         elif page == '🕹':
             embed.add_field(name='🕹 Poll Controls',
-                            value='All these commands can only be used by an <admin> or by the author of the poll. '
+                            value='All these commands except copy can only be used by an <admin> or by the author of the poll. '
                                   'Go to 🛠 Configuration for more info on the permissions.',
+                            inline=False)
+            embed.add_field(name=f'🔹 **Copy** `{pre}copy <poll_label>`',
+                            value='This will give you a cmd string that you can post into any channel to create a copy'
+                                  'of the specified poll. It will increment the label and depending on the settings, '
+                                  'you might need to add missing information like a new deadline. '
+                                  f'\nFor more info, see: `{pre}cmd help`.',
                             inline=False)
             embed.add_field(name=f'🔹 **Close** `{pre}close <poll_label>`',
                             value='Polls will close automatically when their deadline is reached. But you can always '
@@ -180,6 +193,20 @@ class Help(commands.Cog):
                                   'whitespace, use "\w" instead of " " (discord deletes trailing whitespaces).',
                             inline=False)
 
+        elif page == '❔':
+            embed.add_field(name='❔ Debugging',
+                            value='These commands are independent of your server prefix and serve to debug the bot.',
+                            inline=False)
+            embed.add_field(name=f'🔹 **Debug:** `@debug`',
+                            value='This command will check the required permissions in the channel it is used and'
+                                  'generate a short report with suggestions on your next actions.'
+                                  'If you are stuck, please visit the support discord server.',
+                            inline=False)
+            embed.add_field(name=f'🔹 **Mention:** `@mention` | `@mention prefix`',
+                            value='This is a prefix independent command to retrieve your prefix in case you changed '
+                                  'and forgot it. More `@mention` tags might be added in the future.',
+                            inline=False)
+
         elif page == '💖':
             embed.add_field(name='💖 Pollmaster 💖',
                             value='If you enjoy the bot, you can show your appreciation by giving him an upvote on Discordbots.',
@@ -205,8 +232,15 @@ class Help(commands.Cog):
         return embed
 
     @commands.command()
-    async def help(self, ctx, *, topic=None):
+    async def help(self, ctx):
         server = await ask_for_server(self.bot, ctx.message)
+        if not server:
+            return
+
+        if not ctx.message.channel.permissions_for(server.me).embed_links:
+            await ctx.send("Missing permissions. Type \"@debug.\"")
+            return
+
         pre = await get_server_pre(self.bot, server)
         rct = 1
         while rct is not None:
@@ -217,13 +251,16 @@ class Help(commands.Cog):
                 page = rct.emoji
                 msg = rct.message
             rct = await self.embed_list_reaction_handler(ctx, page, pre, msg)
-            # print(res.user, res.reaction, res.reaction.emoji)
         # cleanup
-        await ctx.message.delete()
+        try:
+            await ctx.message.delete()
+        except PermissionError:
+            pass
 
+    # @mention and @debug commands
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.content.startswith("@mention "):
+        if message.content.startswith("@mention"):
             channel = message.channel
             if not isinstance(channel, discord.TextChannel):
                 await channel.send("@mention can only be used in a server text channel.")
@@ -234,12 +271,23 @@ class Help(commands.Cog):
                 await channel.send("Could not determine your server.")
                 return
 
-            tag = message.content.split()[1].lower()
+            if message.content == "@mention":
+                await channel.send("The following @mention tags are available:\n🔹 @mention prefix")
+                return
+
+            try:
+                tag = message.content.split()[1].lower()
+            except IndexError:
+                await channel.send("Wrong formatting. Type \"@mention\" or \"@mention <tag>\".")
+                return
+
             if tag == "prefix":
                 pre = await get_server_pre(self.bot, guild)
                 # await channel.send(f'The prefix for this server/channel is: \n {pre} \n To change it type: \n'
                 #                    f'{pre}prefix <new_prefix>')
                 await channel.send(pre)
+            else:
+                await channel.send(f'Tag "{tag}" not found. Type "@mention" for a list of tags.')
 
         elif message.content == "@debug":
             channel = message.channel
@@ -253,16 +301,40 @@ class Help(commands.Cog):
                 return
 
             status_msg = ''
+            setup_correct = True
 
+            # check send message permissions
             permissions = channel.permissions_for(guild.me)
             if not permissions.send_messages:
-                await message.author.send(f'I don\'t have permission to send text messages in channel {channel} '
-                                          f'on server {guild}')
+                await message.author.send(f'I don\'t have permission to send text messages in channel "{channel}" '
+                                          f'on server "{guild}"')
                 return
 
-            status_msg += f' ✅ Sending messages\n'
+            status_msg += ' ✅ Sending text messages\n'
+
+            # check embed link permissions
+            if permissions.embed_links:
+                status_msg += '✅ Sending embedded messages\n'
+            else:
+                status_msg += '❗ Sending embedded messages. I need permissions to embed links!\n'
+                setup_correct = False
+
+            # check manage messages
+            if permissions.manage_messages:
+                status_msg += '✅ Deleting messages and reactions\n'
+            else:
+                status_msg += '❗ Deleting messages and reactions. I need the manage messages permission!\n'
+                setup_correct = False
+
+            if setup_correct:
+                status_msg += 'No action required. Your permissions are set up correctly for this channel. \n' \
+                              'If the bot does not work, feel free to join the support discord server.'
+            else:
+                status_msg += 'Please try to fix the issues above. \nIf you are still having problems, ' \
+                              'visit the support discord server.'
 
             await channel.send(status_msg)
+
 
 def setup(bot):
     global logger

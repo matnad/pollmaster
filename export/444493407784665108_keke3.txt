@@ -1,0 +1,37 @@
+--------------------------------------------
+POLLMASTER DISCORD EXPORT
+--------------------------------------------
+Server name (ID): VoteBotTesting (444493407784665108)
+Owner of the poll: Newti
+Time of creation: 18-Jun-2019 11:03 
+--------------------------------------------
+POLL SETTINGS
+--------------------------------------------
+Question / Name: asdasd
+Label: keke3
+Anonymous: Yes
+# Choices: 3
+Answer options: asd, fgh, jkl, 121, asd
+Allowed roles: @everyone
+Weights for roles: No weights
+Deadline: 18-Jun-2019 11:04 GMT
+--------------------------------------------
+POLL RESULTS
+--------------------------------------------
+Number of participants: 1
+Raw results: asd: 0, fgh: 1, jkl: 1, 121: 0, asd: 1
+Weighted results: asd: 0, fgh: 1, jkl: 1, 121: 0, asd: 1
+Winning options: fgh, jkl, asd with 1 votes
+--------------------------------------------
+LIST OF PARTICIPANTS
+--------------------------------------------
+Dev|Newti
+--------------------------------------------
+BOT DETAILS
+--------------------------------------------
+Creator: Newti#0654
+Link to invite, vote for or support Pollmaster:
+https://discordbots.org/bot/444514223075360800
+--------------------------------------------
+END OF FILE
+--------------------------------------------

@@ -1,0 +1,36 @@
+--------------------------------------------
+POLLMASTER DISCORD EXPORT
+--------------------------------------------
+Server name (ID): VoteBotTesting (444493407784665108)
+Owner of the poll: Newti
+Time of creation: 12-Apr-2019 15:21 
+--------------------------------------------
+POLL SETTINGS
+--------------------------------------------
+Question / Name: asd
+Label: llll
+Anonymous: No
+Choices: Multiple
+Answer options: in favour, against, abstaining
+Allowed roles: @everyone
+Weights for roles: No weights
+Deadline: 12-Apr-2019 21:21 GMT
+--------------------------------------------
+POLL RESULTS
+--------------------------------------------
+Number of participants: 1
+Raw results: in favour: 0, against: 0, abstaining: 0
+Weighted results: in favour: 0, against: 0, abstaining: 0
+Winning options: in favour, against, abstaining with 0 votes
+--------------------------------------------
+DETAILED POLL RESULTS
+--------------------------------------------
+--------------------------------------------
+BOT DETAILS
+--------------------------------------------
+Creator: Newti#0654
+Link to invite, vote for or support Pollmaster:
+https://discordbots.org/bot/444514223075360800
+--------------------------------------------
+END OF FILE
+--------------------------------------------
