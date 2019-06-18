@@ -1,4 +1,4 @@
-# Pollmaster V 2.3
+# Pollmaster V 2.4
 
 ## Overview
 
@@ -8,6 +8,7 @@ Here is a quick list of features:
 
 - Voting works with reactions (users don't need to type anything)
 - Anonymous voting is possible
+- You can hide the current vote count to prevent sheeping
 - Polls can be single choice, multiple choice or restricted to a specific number of choices
 - You can prepare polls in advance and schedule them to a date and time or manually activate them
 - Polls can be given a deadline or they can be open until closed manually
@@ -23,19 +24,21 @@ Here is a quick list of features:
 
 Here is how Pollmaster looks in action:
 
-![Pollmaster in action](https://i.imgur.com/vSXgd0r.png "Poll 1")
+![Pollmaster in action](https://i.imgur.com/C3zqnK2.png "Poll 1")
 
-![Pollmaster in action](https://i.imgur.com/kMbnmiJ.png "Poll 2")
+![Pollmaster in action](https://i.imgur.com/an0E3EO.png "Poll 2")
 
 ## The most important commands
 
 | Command                | Effect                                             |
 |------------------------|----------------------------------------------------|
 | pm!help                | Shows an interactive help menu                     |
-| pm!new                 | Starts a new poll with all the settings            |
+| pm!new                 | Starts a new poll with the most common settings    |
+| pm!advanced            | Starts a new poll all the settings                 |
 | pm!quick               | Starts a new poll with just a question and options |
 | pm!show <label>        | Shows poll in a specified channel (can be different from original channel) |
 | pm!prefix <new prefix> | Change the prefix for this server                  |
+| @mention prefix        | Show the prefix if you forgot it                   |
 | pm!userrole <any role> | Set the role that has the rights to use the bot    |
 
 ## Getting Started
