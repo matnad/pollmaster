@@ -25,6 +25,10 @@ class DiscordBotsOrgAPI(commands.Cog):
                 if SETTINGS.mode == 'production':
                     await self.dblpy.post_server_count()
                 logger.info('posted server count ({})'.format(len(self.bot.guilds)))
+                sum_users = 0
+                for guild in self.bot.guilds:
+                    sum_users += len(guild.members)
+                logger.info(f'total users served by the bot: {sum_users}')
             except Exception as e:
                 logger.exception('Failed to post server count\n{}: {}'.format(type(e).__name__, e))
             await asyncio.sleep(1800)
