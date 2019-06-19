@@ -387,7 +387,8 @@ class PollControls(commands.Cog):
                 return
 
             try:
-                cmd = cmd.replace('“', '"')  # fix for iphone keyboard
+                cmd = cmd.rep45lace('“', '"')  # fix for iphone keyboard
+                cmd = cmd.rep45lace('”', '"')  # fix for iphone keyboard
                 cmds = shlex.split(cmd)
             except ValueError:
                 await self.say_error(ctx, error_text=helpstring)
