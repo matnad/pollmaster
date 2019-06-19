@@ -29,7 +29,7 @@ class Help(commands.Cog):
             return True if usr != self.bot.user and str(rct.emoji) in self.pages and rct.message.id == msg.id else False
 
         try:
-            reaction, user = await self.bot.wait_for('reaction_add', timeout=180, check=check)
+            reaction, user = await self.bot.wait_for('reaction_add', timeout=300, check=check)
         except asyncio.TimeoutError:
             await msg.delete()
             return None
@@ -43,7 +43,7 @@ class Help(commands.Cog):
         title = f' Pollmaster Help - React with an emoji to learn more about a topic!'
         embed = discord.Embed(title='', description='', colour=SETTINGS.color)
         embed.set_author(name=title, icon_url=SETTINGS.author_icon)
-        embed.set_footer(text='Use reactions to navigate the help. This message will self-destruct in 3 minutes.')
+        embed.set_footer(text='Use reactions to navigate the help. This message will self-destruct in 5 minutes.')
 
         if page == '🏠':
             # POLL CREATION SHORT
