@@ -260,6 +260,9 @@ class Help(commands.Cog):
     # @mention and @debug commands
     @commands.Cog.listener()
     async def on_message(self, message):
+        if message.author == self.bot.owner:
+            return
+
         if message.content.startswith("@mention"):
             channel = message.channel
             if not isinstance(channel, discord.TextChannel):
