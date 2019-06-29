@@ -260,7 +260,7 @@ class Help(commands.Cog):
     # @mention and @debug commands
     @commands.Cog.listener()
     async def on_message(self, message):
-        if message.author == self.bot.owner:
+        if message.author == self.bot.user:
             return
 
         if message.content.startswith("@mention"):
