@@ -329,6 +329,13 @@ class Help(commands.Cog):
                 status_msg += '❗ Deleting messages and reactions. I need the manage messages permission!\n'
                 setup_correct = False
 
+            # check adding reactions
+            if permissions.add_reactions:
+                status_msg += '✅ Adding reactions\n'
+            else:
+                status_msg += '❗ Adding reactions. I need the add reactions permission!\n'
+                setup_correct = False
+
             if setup_correct:
                 status_msg += 'No action required. Your permissions are set up correctly for this channel. \n' \
                               'If the bot does not work, feel free to join the support discord server.'
