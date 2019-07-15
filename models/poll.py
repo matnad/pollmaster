@@ -1431,6 +1431,7 @@ class Poll:
                     embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
                     await user.send(embed=embed)
                     # refresh_poll = False
+                    return
                 else:
                     if choice in self.survey_flags:
                         if len(self.votes[str(user.id)]['answers']) != len(self.survey_flags):
@@ -1448,6 +1449,8 @@ class Poll:
 
                     self.votes[str(user.id)]['choices'].append(choice)
                     self.votes[str(user.id)]['choices'] = list(set(self.votes[str(user.id)]['choices']))
+                    if self.anonymous and self.hide_count:
+                        await user.send(f'Your vote for **{self.options_reaction[choice]}** has been counted.')
             # else:
             #     if [choice] == self.votes[user.id]['choices']:
             #         # refresh_poll = False
@@ -1497,6 +1500,8 @@ class Poll:
                 await self.save_to_db()
                 if not self.hide_count:
                     asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
+                elif self.anonymous:
+                    await user.send(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
             except ValueError:
                 pass
 
