@@ -1066,7 +1066,8 @@ class Poll:
     async def export(self):
         """Create export file and return path"""
         if not self.open:
-            fn = 'export/' + str(self.server.id) + '_' + str(self.short) + '.txt'
+            clean_label = str(self.short).replace("/", "").replace(".", "")
+            fn = 'export/' + str(self.server.id) + '_' + clean_label + '.txt'
             with codecs.open(fn, 'w', 'utf-8') as outfile:
                 outfile.write(await self.to_export())
             return fn
