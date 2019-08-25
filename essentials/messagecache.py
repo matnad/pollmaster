@@ -1,7 +1,7 @@
 import logging
 import discord
 
-logger = logging.getLogger('bot')
+logger = logging.getLogger('discord')
 
 
 class MessageCache:

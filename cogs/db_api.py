@@ -36,5 +36,5 @@ class DiscordBotsOrgAPI(commands.Cog):
 
 def setup(bot):
     global logger
-    logger = logging.getLogger('bot')
+    logger = logging.getLogger('discord')
     bot.add_cog(DiscordBotsOrgAPI(bot))

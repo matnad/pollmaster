@@ -27,10 +27,10 @@ bot.remove_command('help')
 
 # logger
 # create logger with 'spam_application'
-logger = logging.getLogger('bot')
+logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 # create file handler which logs even debug messages
-fh = logging.FileHandler('pollmaster.log')
+fh = logging.FileHandler('pollmaster.log',  encoding='utf-8', mode='w')
 fh.setLevel(logging.DEBUG)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
@@ -86,7 +86,7 @@ async def on_ready():
 @bot.event
 async def on_command_error(ctx, e):
 
-    if ctx.cog.qualified_name == "Admin":
+    if hasattr(ctx.cog, 'qualified_name') and ctx.cog.qualified_name == "Admin":
         # Admin cog handles the errors locally
         return
 

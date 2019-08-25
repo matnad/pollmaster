@@ -348,5 +348,5 @@ class Help(commands.Cog):
 
 def setup(bot):
     global logger
-    logger = logging.getLogger('bot')
+    logger = logging.getLogger('discord')
     bot.add_cog(Help(bot))

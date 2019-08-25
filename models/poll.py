@@ -12,6 +12,8 @@ import discord
 
 from uuid import uuid4
 from string import ascii_lowercase
+
+from bson import ObjectId
 from matplotlib import rcParams
 from matplotlib.afm import AFM
 from pytz import UnknownTimeZoneError
@@ -20,9 +22,10 @@ from unidecode import unidecode
 from essentials.multi_server import get_pre
 from essentials.exceptions import *
 from essentials.settings import SETTINGS
+from models.vote import Vote
 from utils.misc import possible_timezones
 
-logger = logging.getLogger('bot')
+logger = logging.getLogger('discord')
 
 # Helvetica is the closest font to Whitney (discord uses Whitney) in afm
 # This is used to estimate text width and adjust the layout of the embeds
@@ -40,6 +43,11 @@ class Poll:
 
         self.bot = bot
         self.cursor_pos = 0
+
+        self.vote_counts = {}
+        self.vote_counts_weighted = {}
+        self.full_votes = []
+        self.unique_participants = set()
 
         if not load and ctx:
             if server is None:
@@ -81,7 +89,8 @@ class Poll:
 
             self.wizard_messages = []
 
-    def get_preset_options(self, number):
+    @staticmethod
+    def get_preset_options(number):
         if number == 1:
             return ['✅', '❎']
         elif number == 2:
@@ -818,9 +827,9 @@ class Poll:
 
     async def clean_up(self, channel):
         if isinstance(channel, discord.TextChannel):
-            await channel.delete_messages(self.wizard_messages)
+            self.bot.loop.create_task(channel.delete_messages(self.wizard_messages))
 
-    async def ask_for_input_DM(self, user, title, text):
+    async def ask_for_input_dm(self, user, title, text):
         embed = discord.Embed(title=title, description=text, color=SETTINGS.color)
         embed.set_footer(text='You can answer anywhere.')
         message = await user.send(embed=embed)
@@ -933,6 +942,10 @@ class Poll:
 
     async def to_export(self):
         """Create report and return string"""
+        # load all votes from database
+        await self.load_full_votes()
+        await self.load_vote_counts()
+        await self.load_unique_participants()
         # build string for weights
         weight_str = 'No weights'
         if self.weights_roles.__len__() > 0:
@@ -945,7 +958,7 @@ class Poll:
         winning_options = []
         winning_votes = 0
         for i, o in enumerate(self.options_reaction):
-            votes = self.count_votes(i, weighted=True)
+            votes = self.vote_counts_weighted.get(i, 0)
             if votes > winning_votes:
                 winning_options = [o]
                 winning_votes = votes
@@ -972,39 +985,49 @@ class Poll:
                   f'--------------------------------------------\n'
                   f'POLL RESULTS\n'
                   f'--------------------------------------------\n'
-                  f'Number of participants: {self.votes.__len__()}\n'
-                  f'Raw results: {", ".join([str(o)+": "+str(self.count_votes(i, weighted=False)) for i,o in enumerate(self.options_reaction)])}\n'
-                  f'Weighted results: {", ".join([str(o)+": "+str(self.count_votes(i, weighted=True)) for i,o in enumerate(self.options_reaction)])}\n'
-                  f'Winning option{"s" if winning_options.__len__() > 1 else ""}: {", ".join(winning_options)} with {winning_votes} votes\n')
+                  f'Number of participants: {len(self.unique_participants)}\n'
+                  f'Raw results: {", ".join([str(o)+": "+str(self.vote_counts.get(i, 0)) for i,o in enumerate(self.options_reaction)])}\n'
+                  f'Weighted results: {", ".join([str(o)+": "+str(self.vote_counts_weighted.get(i, 0)) for i,o in enumerate(self.options_reaction)])}\n'
+                  f'Winning option{"s" if len(winning_options) > 1 else ""}: {", ".join(winning_options)} with {winning_votes} votes\n')
 
         if not self.anonymous:
             export += '--------------------------------------------\n' \
                       'DETAILED POLL RESULTS\n' \
                       '--------------------------------------------'
 
-            for user_id in self.votes:
+            for user_id in self.unique_participants:
                 member = self.server.get_member(int(user_id))
-                if member and self.votes[str(member.id)]['choices'].__len__() == 0:
-                    continue
+
                 if not member:
                     name = "<Deleted User>"
                 else:
                     name = member.nick
-
                 if not name:
                     name = member.name
+
                 export += f'\n{name}: '
-                if self.votes[str(user_id)]['weight'] != 1:
-                    export += f' (weight: {self.votes[str(user_id)]["weight"]})'
+                # if self.votes[str(user_id)]['weight'] != 1:
+                #     export += f' (weight: {self.votes[str(user_id)]["weight"]})'
                 # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
                 choice_text_list = []
-                for choice in self.votes[str(user_id)]['choices']:
-                    choice_text = self.options_reaction[choice]
-                    if choice in self.survey_flags:
-                        choice_text += " ("\
-                                  + self.votes[str(user_id)]["answers"][self.survey_flags.index(choice)] \
-                                  + ") "
+
+                for vote in self.full_votes:
+                    if vote.user_id != user_id:
+                        continue
+
+                    choice_text = self.options_reaction[vote.choice]
+                    if vote.choice in self.survey_flags:
+                        choice_text += f' ({vote.answer}) '
                     choice_text_list.append(choice_text)
+
+                # for choice in self.votes[str(user_id)]['choices']:
+                #     choice_text = self.options_reaction[choice]
+                #     if choice in self.survey_flags:
+                #         choice_text += " ("\
+                #                   + self.votes[str(user_id)]["answers"][self.survey_flags.index(choice)] \
+                #                   + ") "
+                #     choice_text_list.append(choice_text)
+
                 if choice_text_list:
                     export += ', '.join(choice_text_list)
 
@@ -1014,23 +1037,23 @@ class Poll:
                       'LIST OF PARTICIPANTS\n' \
                       '--------------------------------------------'
 
-            for user_id in self.votes:
+            for user_id in self.unique_participants:
                 member = self.server.get_member(int(user_id))
-                if member and self.votes[str(user_id)]['choices'].__len__() == 0:
-                    continue
+
                 if not member:
                     name = "<Deleted User>"
                 else:
                     name = member.nick
                 if not name:
                     name = member.name
+
                 export += f'\n{name}'
-                if self.votes[str(user_id)]['weight'] != 1:
-                    export += f' (weight: {self.votes[str(user_id)]["weight"]})'
+                # if self.votes[str(user_id)]['weight'] != 1:
+                #     export += f' (weight: {self.votes[str(user_id)]["weight"]})'
                 # export += ': ' + ', '.join([self.options_reaction[c] for c in self.votes[str(user_id)]['choices']])
             export += '\n'
 
-            if self.survey_flags.__len__() > 0:
+            if len(self.survey_flags) > 0:
                 export += '--------------------------------------------\n' \
                           'CUSTOM ANSWERS (RANDOM ORDER)\n' \
                           '--------------------------------------------'
@@ -1038,18 +1061,23 @@ class Poll:
                     if i not in self.survey_flags:
                         continue
                     custom_answers = []
-                    for user_id in self.votes:
-                        if i in self.votes[str(user_id)]["choices"]:
-                            custom_answers.append(f'\n{self.votes[str(user_id)]["answers"][self.survey_flags.index(i)]}')
+
+                    for vote in self.full_votes:
+                        if vote.choice == i and vote.answer != '':
+                            custom_answers.append(f'\n{vote.answer}')
+
+                    # for user_id in self.votes:
+                    #     if i in self.votes[str(user_id)]["choices"]:
+                    #         custom_answers.append(f'\n{self.votes[str(user_id)]["answers"][self.survey_flags.index(i)]}')
 
                     export += "\n" + o + ":"
-                    if custom_answers.__len__() > 0:
+                    if len(custom_answers) > 0:
                         random.shuffle(custom_answers)  # randomize answers per question
                         for answer in custom_answers:
                             export += answer
                             export += '\n'
                     else:
-                        export += "No custom answers were submitted."
+                        export += "\nNo custom answers were submitted."
                         export += '\n'
 
         export += ('--------------------------------------------\n'
@@ -1076,7 +1104,7 @@ class Poll:
 
     async def from_dict(self, d):
 
-        self.id = d['_id']
+        self.id = ObjectId(str(d['_id']))
         self.server = self.bot.get_guild(int(d['server_id']))
         self.channel = self.bot.get_channel(int(d['channel_id']))
         if self.server:
@@ -1150,7 +1178,33 @@ class Poll:
         else:
             return None
 
-    async def add_field_custom(self, name, value, embed):
+    async def load_votes_for_user(self, user_id):
+        return await Vote.load_votes_for_poll_and_user(self.bot, self.id, user_id)
+
+    async def load_unique_participants(self):
+        await self.load_full_votes()
+        voters = set()
+        for v in self.full_votes:
+            voters.add(v.user_id)
+        self.unique_participants = voters
+
+    async def load_vote_counts(self):
+        if not self.vote_counts:
+            self.vote_counts = await Vote.load_vote_counts_for_poll(self.bot, self.id)
+
+        if len(self.weights_numbers) > 0 and not self.vote_counts_weighted:
+            # find weighted totals
+            await self.load_full_votes()
+            for v in self.full_votes:
+                self.vote_counts_weighted[v.choice] = self.vote_counts_weighted.get(v.choice, 0) + v.weight
+        else:
+            self.vote_counts_weighted = self.vote_counts
+
+    async def load_full_votes(self):
+        if not self.full_votes:
+            self.full_votes = await Vote.load_all_votes_for_poll(self.bot, self.id)
+
+    def add_field_custom(self, name, value, embed):
         """this is used to estimate the width of text and add empty embed fields for a cleaner report
         cursor_pos is used to track if we are at the start of a new line in the report. Each line has max 2 slots for info.
         If the line is short, we can fit a second field, if it is too long, we get an automatic linebreak.
@@ -1183,84 +1237,81 @@ class Poll:
 
         # ## adding fields with custom, length sensitive function
         if not await self.is_active():
-            embed = await self.add_field_custom(name='**INACTIVE**',
+            embed = self.add_field_custom(name='**INACTIVE**',
                                                 value=f'This poll is inactive until '
                                                       f'{self.get_activation_date(string=True)}.',
                                                 embed=embed
                                                 )
 
-        embed = await self.add_field_custom(name='**Poll Question**', value=self.name, embed=embed)
+        embed = self.add_field_custom(name='**Poll Question**', value=self.name, embed=embed)
 
         if self.roles != ['@everyone']:
-            embed = await self.add_field_custom(name='**Roles**', value=', '.join(self.roles), embed=embed)
+            embed = self.add_field_custom(name='**Roles**', value=', '.join(self.roles), embed=embed)
             if len(self.weights_roles) > 0:
                 weights = []
                 for r, n in zip(self.weights_roles, self.weights_numbers):
                     weights.append(f'{r}: {n}')
-                embed = await self.add_field_custom(name='**Weights**', value=', '.join(weights), embed=embed)
+                embed = self.add_field_custom(name='**Weights**', value=', '.join(weights), embed=embed)
 
-        embed = await self.add_field_custom(name='**Anonymous**', value=self.anonymous, embed=embed)
+        embed = self.add_field_custom(name='**Anonymous**', value=self.anonymous, embed=embed)
 
         if self.duration != 0:
-            embed = await self.add_field_custom(name='**Deadline**', value=await self.get_poll_status(), embed=embed)
+            embed = self.add_field_custom(name='**Deadline**', value=await self.get_poll_status(), embed=embed)
 
-        # embed = await self.add_field_custom(name='**Author**', value=self.author.name, embed=embed)
-
-        if self.reaction:
-            if self.options_reaction_default:
-                if await self.is_open():
-                    text = f'**Score** '
-                    if self.multiple_choice == 0:
-                        text += f'(Multiple Choice)'
-                    elif self.multiple_choice == 1:
-                        text += f'(Single Choice)'
-                    else:
-                        text += f'({self.multiple_choice} Choices)'
+        # embed = self.add_field_custom(name='**Author**', value=self.author.name, embed=embed)
+        await self.load_vote_counts()
+        if self.options_reaction_default:
+            if await self.is_open():
+                text = f'**Score** '
+                if self.multiple_choice == 0:
+                    text += f'(Multiple Choice)'
+                elif self.multiple_choice == 1:
+                    text += f'(Single Choice)'
                 else:
-                    text = f'**Final Score**'
-
-                vote_display = []
-                for i, r in enumerate(self.options_reaction):
-                    vote_display.append(f'{r} {self.count_votes(i)}')
-                embed = await self.add_field_custom(name=text, value=' '.join(vote_display), embed=embed)
+                    text += f'({self.multiple_choice} Choices)'
             else:
-                # embed.add_field(name='\u200b', value='\u200b', inline=False)
-                if await self.is_open():
-                    head = ""
-                    if self.multiple_choice == 0:
-                        head += 'You can vote for multiple options:'
-                    elif self.multiple_choice == 1:
-                        head += 'You have 1 vote:'
-                    else:
-                        head += f'You can vote for {self.multiple_choice} options:'
-                else:
-                    head = f'Final Results of the Poll '
-                    if self.multiple_choice == 0:
-                        head += '(Multiple Choice):'
-                    elif self.multiple_choice == 1:
-                        head += '(Single Choice):'
-                    else:
-                        head += f'(With up to {self.multiple_choice} choices):'
-                # embed = await self.add_field_custom(name='**Options**', value=text, embed=embed)
-                options_text = '**' + head + '**\n'
-                for i, r in enumerate(self.options_reaction):
-                    custom_icon = ''
-                    if i in self.survey_flags:
-                        custom_icon = '🖊'
-                    options_text += f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {r}'
-                    if self.hide_count and self.open:
-                        options_text += '\n'
-                    else:
-                        options_text += f' **- {self.count_votes(i)} Votes**\n'
-                    # embed = await self.add_field_custom(
-                    #     name=f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {self.count_votes(i)}',
-                    #     value=r,
-                    #     embed=embed
-                    # )
-                embed.add_field(name='\u200b', value=options_text, inline=False)
+                text = f'**Final Score**'
 
-        # else:
-        #     embed = await self.add_field_custom(name='**Options**', value=', '.join(self.get_options()), embed=embed)
+            vote_display = []
+            for i, r in enumerate(self.options_reaction):
+                vote_display.append(f'{r} {self.vote_counts_weighted.get(i, 0)}')
+            embed = self.add_field_custom(name=text, value=' '.join(vote_display), embed=embed)
+        else:
+            # embed.add_field(name='\u200b', value='\u200b', inline=False)
+            if await self.is_open():
+                head = ""
+                if self.multiple_choice == 0:
+                    head += 'You can vote for multiple options:'
+                elif self.multiple_choice == 1:
+                    head += 'You have 1 vote:'
+                else:
+                    head += f'You can vote for {self.multiple_choice} options:'
+            else:
+                head = f'Final Results of the Poll '
+                if self.multiple_choice == 0:
+                    head += '(Multiple Choice):'
+                elif self.multiple_choice == 1:
+                    head += '(Single Choice):'
+                else:
+                    head += f'(With up to {self.multiple_choice} choices):'
+            # embed = self.add_field_custom(name='**Options**', value=text, embed=embed)
+            options_text = '**' + head + '**\n'
+            for i, r in enumerate(self.options_reaction):
+                custom_icon = ''
+                if i in self.survey_flags:
+                    custom_icon = '🖊'
+                options_text += f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {r}'
+                if self.hide_count and self.open:
+                    options_text += '\n'
+                else:
+                    options_text += f' **- {self.vote_counts_weighted.get(i, 0)} Votes**\n'
+                # embed = self.add_field_custom(
+                #     name=f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {self.count_votes(i)}',
+                #     value=r,
+                #     embed=embed
+                # )
+            embed.add_field(name='\u200b', value=options_text, inline=False)
+
         custom_text = ""
         if len(self.survey_flags) > 0:
             custom_text = " 🖊 next to an option means you can submit a custom answer."
@@ -1362,150 +1413,257 @@ class Poll:
         else:
             return 'Poll is closed.'
 
-    def count_votes(self, option, weighted=True):
-        '''option: number from 0 to n'''
-        if weighted:
-            return sum([self.votes[c]['weight'] for c in [u for u in self.votes] if option in self.votes[c]['choices']])
-        else:
-            return sum([1 for c in [u for u in self.votes] if option in self.votes[c]['choices']])
+    # def count_votes(self, option, weighted=True):
+    #     """option: number from 0 to n"""
+    #     if weighted:
+    #         return sum([self.votes[c]['weight'] for c in [u for u in self.votes] if option in self.votes[c]['choices']])
+    #     else:
+    #         return sum([1 for c in [u for u in self.votes] if option in self.votes[c]['choices']])
 
-    async def vote(self, user, option, message, lock):
+    async def vote(self, user, option, message):
         if not await self.is_open():
             # refresh to show closed poll
-            await message.edit(embed=await self.generate_embed())
-            await message.clear_reactions()
+            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+            self.bot.loop.create_task(message.clear_reactions())
             return
         elif not await self.is_active():
             return
 
+        # find index of choice or cancel vote
         choice = 'invalid'
-        # refresh_poll = True
+        if self.options_reaction_default:
+            if option in self.options_reaction:
+                choice = self.options_reaction.index(option)
+        else:
+            if option in AZ_EMOJIS:
+                choice = AZ_EMOJIS.index(option)
+        if choice == 'invalid':
+            return
 
-        # get weight
+        # get highest weight
         weight = 1
-        if self.weights_roles.__len__() > 0:
+        if len(self.weights_roles) > 0:
             valid_weights = [self.weights_numbers[self.weights_roles.index(r)] for r in
                              list(set([n.name for n in user.roles]).intersection(set(self.weights_roles)))]
-            if valid_weights.__len__() > 0:
+            if len(valid_weights) > 0:
                 weight = max(valid_weights)
 
-        if str(user.id) not in self.votes:
-            self.votes[str(user.id)] = {'weight': weight, 'choices': [], 'answers': []}
-        else:
-            self.votes[str(user.id)]['weight'] = weight
+        # unvote for anon
+        if self.anonymous:
+            vote = await Vote.load_from_db(self.bot, self.id, user.id, choice)
+            if vote:
+                await vote.delete_from_db()
+                self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+                return
 
-        if self.options_reaction_default:
-            if option in self.options_reaction:
-                choice = self.options_reaction.index(option)
-        else:
-            if option in AZ_EMOJIS:
-                choice = AZ_EMOJIS.index(option)
+        # check if already voted for the same choice
+        votes = await self.load_votes_for_user(user.id)
+        for v in votes:
+            if v.choice == choice:
+                return  # already voted
 
-        if choice != 'invalid':
-            # if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
-            if choice in self.votes[str(user.id)]['choices']:
-                if self.anonymous:
-                    # anonymous multiple choice -> can't unreact so we toggle with react
-                    logger.warning("Unvoting, should not happen for non anon polls.")
-                    await self.unvote(user, option, message, lock)
-                # refresh_poll = False
-            else:
-                if self.multiple_choice > 0 and self.votes[str(user.id)]['choices'].__len__() >= self.multiple_choice:
-                    # # auto unvote for single choice non anonymous
-                    # if self.votes[str(user.id)]['choices'].__len__() == 1 and not self.anonymous:
-                    #     prev_choice = self.votes[str(user.id)]['choices'][0]
-                    #     if self.options_reaction_default:
-                    #         emoji = self.options_reaction[prev_choice]
-                    #     else:
-                    #         emoji = AZ_EMOJIS[prev_choice]
-                    #     await message.remove_reaction(emoji, user)
-                    # else:
-                    say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
-                               f'Before you can vote again, you need to unvote one of your choices.\n' \
-                               f'Your current choices are:\n'
-                    for c in self.votes[str(user.id)]['choices']:
-                        if self.options_reaction_default:
-                            say_text += f'{self.options_reaction[c]}\n'
-                        else:
-                            say_text += f'{AZ_EMOJIS[c]} {self.options_reaction[c]}\n'
-                    embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
-                    embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
-                    await user.send(embed=embed)
-                    # refresh_poll = False
-                    return
+        # check if max votes exceeded
+        if 0 < self.multiple_choice <= len(votes):
+            say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
+                f'Before you can vote again, you need to unvote one of your choices.\n' \
+                f'Your current choices are:\n'
+            for v in votes:
+                if self.options_reaction_default:
+                    say_text += f'{self.options_reaction[v.choice]}\n'
                 else:
-                    if choice in self.survey_flags:
-                        if len(self.votes[str(user.id)]['answers']) != len(self.survey_flags):
-                            self.votes[str(user.id)]['answers'] = ['' for i in range(len(self.survey_flags))]
-                        custom_input = await self.ask_for_input_DM(
-                            user,
-                            "Custom Answer",
-                            "For this vote option you can provide a custom reply. "
-                            "Note that everyone will be able to see the answer. If you don't want to provide a "
-                            "custom answer, type \"-\""
-                        )
-                        if not custom_input or custom_input.lower() == "-":
-                            custom_input = "No Answer"
-                        self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = custom_input
-
-                    self.votes[str(user.id)]['choices'].append(choice)
-                    self.votes[str(user.id)]['choices'] = list(set(self.votes[str(user.id)]['choices']))
-                    if self.anonymous and self.hide_count:
-                        await user.send(f'Your vote for **{self.options_reaction[choice]}** has been counted.')
-            # else:
-            #     if [choice] == self.votes[user.id]['choices']:
-            #         # refresh_poll = False
-            #         # if self.anonymous:
-            #         # undo anonymous vote
-            #         await self.unvote(user, option, message, lock)
-            #         return
-            #     else:
-            #         self.votes[user.id]['choices'] = [choice]
-
-        else:
-            # unknow emoji
+                    say_text += f'{AZ_EMOJIS[v.choice]} {self.options_reaction[v.choice]}\n'
+            embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
+            embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
+            self.bot.loop.create_task(user.send(embed=embed))
             return
 
-        # commit
-        await self.save_to_db()
-        if not self.hide_count:
-            asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
+        answer = ''
+        if choice in self.survey_flags:
+            answer = await self.ask_for_input_dm(
+                user,
+                "Custom Answer",
+                "For this vote option you can provide a custom reply. "
+                "Note that everyone will be able to see the answer. If you don't want to provide a "
+                "custom answer, type \"-\""
+            )
+            if not answer or answer.lower() == "-":
+                answer = "No Answer"
 
-    async def unvote(self, user, option, message, lock):
+        if self.anonymous and self.hide_count:
+            self.bot.loop.create_task(user.send(f'Your vote for **{self.options_reaction[choice]}** has been counted.'))
+
+        # commit
+        vote = Vote(self.bot, self.id, user.id, choice, weight, answer)
+        await vote.save_to_db()
+        if not self.hide_count:
+            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+
+    # async def vote(self, user, option, message, lock):
+    #     if not await self.is_open():
+    #         # refresh to show closed poll
+    #         await message.edit(embed=await self.generate_embed())
+    #         await message.clear_reactions()
+    #         return
+    #     elif not await self.is_active():
+    #         return
+    #
+    #     choice = 'invalid'
+    #     # refresh_poll = True
+    #
+    #     # get weight
+    #     weight = 1
+    #     if self.weights_roles.__len__() > 0:
+    #         valid_weights = [self.weights_numbers[self.weights_roles.index(r)] for r in
+    #                          list(set([n.name for n in user.roles]).intersection(set(self.weights_roles)))]
+    #         if valid_weights.__len__() > 0:
+    #             weight = max(valid_weights)
+    #
+    #     if str(user.id) not in self.votes:
+    #         self.votes[str(user.id)] = {'weight': weight, 'choices': [], 'answers': []}
+    #     else:
+    #         self.votes[str(user.id)]['weight'] = weight
+    #
+    #     if self.options_reaction_default:
+    #         if option in self.options_reaction:
+    #             choice = self.options_reaction.index(option)
+    #     else:
+    #         if option in AZ_EMOJIS:
+    #             choice = AZ_EMOJIS.index(option)
+    #
+    #     if choice != 'invalid':
+    #         # if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
+    #         if choice in self.votes[str(user.id)]['choices']:
+    #             if self.anonymous:
+    #                 # anonymous multiple choice -> can't unreact so we toggle with react
+    #                 logger.warning("Unvoting, should not happen for non anon polls.")
+    #                 await self.unvote(user, option, message, lock)
+    #             # refresh_poll = False
+    #         else:
+    #             if self.multiple_choice > 0 and self.votes[str(user.id)]['choices'].__len__() >= self.multiple_choice:
+    #                 # # auto unvote for single choice non anonymous
+    #                 # if self.votes[str(user.id)]['choices'].__len__() == 1 and not self.anonymous:
+    #                 #     prev_choice = self.votes[str(user.id)]['choices'][0]
+    #                 #     if self.options_reaction_default:
+    #                 #         emoji = self.options_reaction[prev_choice]
+    #                 #     else:
+    #                 #         emoji = AZ_EMOJIS[prev_choice]
+    #                 #     await message.remove_reaction(emoji, user)
+    #                 # else:
+    #                 say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
+    #                            f'Before you can vote again, you need to unvote one of your choices.\n' \
+    #                            f'Your current choices are:\n'
+    #                 for c in self.votes[str(user.id)]['choices']:
+    #                     if self.options_reaction_default:
+    #                         say_text += f'{self.options_reaction[c]}\n'
+    #                     else:
+    #                         say_text += f'{AZ_EMOJIS[c]} {self.options_reaction[c]}\n'
+    #                 embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
+    #                 embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
+    #                 await user.send(embed=embed)
+    #                 # refresh_poll = False
+    #                 return
+    #             else:
+    #                 if choice in self.survey_flags:
+    #                     if len(self.votes[str(user.id)]['answers']) != len(self.survey_flags):
+    #                         self.votes[str(user.id)]['answers'] = ['' for i in range(len(self.survey_flags))]
+    #                     custom_input = await self.ask_for_input_DM(
+    #                         user,
+    #                         "Custom Answer",
+    #                         "For this vote option you can provide a custom reply. "
+    #                         "Note that everyone will be able to see the answer. If you don't want to provide a "
+    #                         "custom answer, type \"-\""
+    #                     )
+    #                     if not custom_input or custom_input.lower() == "-":
+    #                         custom_input = "No Answer"
+    #                     self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = custom_input
+    #
+    #                 self.votes[str(user.id)]['choices'].append(choice)
+    #                 self.votes[str(user.id)]['choices'] = list(set(self.votes[str(user.id)]['choices']))
+    #                 if self.anonymous and self.hide_count:
+    #                     await user.send(f'Your vote for **{self.options_reaction[choice]}** has been counted.')
+    #         # else:
+    #         #     if [choice] == self.votes[user.id]['choices']:
+    #         #         # refresh_poll = False
+    #         #         # if self.anonymous:
+    #         #         # undo anonymous vote
+    #         #         await self.unvote(user, option, message, lock)
+    #         #         return
+    #         #     else:
+    #         #         self.votes[user.id]['choices'] = [choice]
+    #
+    #     else:
+    #         # unknow emoji
+    #         return
+    #
+    #     # commit
+    #     await self.save_to_db()
+    #     if not self.hide_count:
+    #         asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
+
+    async def unvote(self, user, option, message):
         if not await self.is_open():
             # refresh to show closed poll
-            await message.edit(embed=await self.generate_embed())
-            if not isinstance(message.channel, discord.abc.PrivateChannel):
-                await message.clear_reactions()
+            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+            self.bot.loop.create_task(message.clear_reactions())
             return
         elif not await self.is_active():
             return
 
-        if str(user.id) not in self.votes:
-            return
-
+        # find index of choice or cancel vote
         choice = 'invalid'
-
         if self.options_reaction_default:
             if option in self.options_reaction:
                 choice = self.options_reaction.index(option)
         else:
             if option in AZ_EMOJIS:
                 choice = AZ_EMOJIS.index(option)
+        if choice == 'invalid':
+            return
 
-        if choice != 'invalid' and choice in self.votes[str(user.id)]['choices']:
-            try:
-                if choice in self.survey_flags and len(self.votes[str(user.id)]['answers']) == len(self.survey_flags):
-                    self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = ''
-                self.votes[str(user.id)]['choices'].remove(choice)
-                await self.save_to_db()
-                if not self.hide_count:
-                    asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
-                elif self.anonymous:
-                    await user.send(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
-            except ValueError:
-                pass
+        vote = await Vote.load_from_db(self.bot, self.id, user.id, choice)
+        if vote:
+            await vote.delete_from_db()
 
-    async def has_required_role(self, user):
+        if not self.hide_count:
+            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+        elif self.anonymous:
+            self.bot.loop.create_task(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
+
+    # async def unvote(self, user, option, message, lock):
+    #     if not await self.is_open():
+    #         # refresh to show closed poll
+    #         await message.edit(embed=await self.generate_embed())
+    #         if not isinstance(message.channel, discord.abc.PrivateChannel):
+    #             await message.clear_reactions()
+    #         return
+    #     elif not await self.is_active():
+    #         return
+    #
+    #     if str(user.id) not in self.votes:
+    #         return
+    #
+    #     choice = 'invalid'
+    #
+    #     if self.options_reaction_default:
+    #         if option in self.options_reaction:
+    #             choice = self.options_reaction.index(option)
+    #     else:
+    #         if option in AZ_EMOJIS:
+    #             choice = AZ_EMOJIS.index(option)
+    #
+    #     if choice != 'invalid' and choice in self.votes[str(user.id)]['choices']:
+    #         try:
+    #             if choice in self.survey_flags and len(self.votes[str(user.id)]['answers']) == len(self.survey_flags):
+    #                 self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = ''
+    #             self.votes[str(user.id)]['choices'].remove(choice)
+    #             await self.save_to_db()
+    #             if not self.hide_count:
+    #                 asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
+    #             elif self.anonymous:
+    #                 await user.send(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
+    #         except ValueError:
+    #             pass
+
+    def has_required_role(self, user):
         return not set([r.name for r in user.roles]).isdisjoint(self.roles)
 
