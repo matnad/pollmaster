@@ -4,13 +4,13 @@ import datetime
 import logging
 import re
 import shlex
+import asyncpg
 
 import discord
 import pytz
 
-from discord.ext import commands
+from discord.ext import tasks, commands
 
-from models.vote import Vote
 from utils.misc import CustomFormatter
 from models.poll import Poll
 from utils.paginator import embed_list_paginated
@@ -27,11 +27,40 @@ AZ_EMOJIS = [(b'\\U0001f1a'.replace(b'a', bytes(hex(224 + (6 + i))[2:], "utf-8")
 class PollControls(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.bot.loop.create_task(self.close_polls())
         self.ignore_next_removed_reaction = {}
+        self.index = 0
+        self.close_polls.start()
 
-    # # General Methods
+    def cog_unload(self):
+        self.close_polls.cancel()
 
+    @tasks.loop(seconds=5)
+    async def close_polls(self):
+        if hasattr(self.bot, 'db'):
+            # TODO: add timezone stuff
+            query = self.bot.db.polls.find({'open': True, 'duration': {
+                '$gte': datetime.datetime.now(),
+                '$lte': datetime.datetime.now() + datetime.timedelta(hours=1)
+            }})
+            if query:
+                n = 0
+                for pd in [poll async for poll in query]:
+                    n += 1
+                print(n)
+                # for pd in [poll async for poll in query]:
+                #     p = Poll(self.bot, load=True)
+                #     await p.from_dict(pd)
+                #     if not p.server:
+                #         continue
+                #     if not p.open:
+                #         try:
+                #             await p.channel.send('This poll has reached the deadline and is closed!')
+                #             await p.post_embed(p.channel)
+                #         except:
+                #             continue
+
+
+    # General Methods
     def get_label(self, message: discord.Message):
         label = None
         if message and message.embeds:
@@ -43,53 +72,55 @@ class PollControls(commands.Cog):
                     label = label_full[3:]
         return label
 
-    async def close_polls(self):
-        """This function runs every 60 seconds to schedule prepared polls and close expired polls"""
-        while True:
-            try:
-                if not hasattr(self.bot, 'db'):
-                    await asyncio.sleep(30)
-                    continue
 
-                query = self.bot.db.polls.find({'active': False, 'activation': {"$not": re.compile("0")}})
-                if query:
-                    for pd in [poll async for poll in query]:
-                        p = Poll(self.bot, load=True)
-                        await p.from_dict(pd)
-                        if not p.server:
-                            continue
-                        if p.active:
-                            try:
-                                await p.channel.send('This poll has been scheduled and is active now!')
-                                await p.post_embed(p.channel)
-                            except:
-                                continue
 
-                query = self.bot.db.polls.find({'open': True, 'duration': {"$not": re.compile("0")}})
-                if query:
-                    for pd in [poll async for poll in query]:
-                        p = Poll(self.bot, load=True)
-                        await p.from_dict(pd)
-                        if not p.server:
-                            continue
-                        if not p.open:
-                            try:
-                                await p.channel.send('This poll has reached the deadline and is closed!')
-                                await p.post_embed(p.channel)
-                            except:
-                                continue
-            except AttributeError as ae:
-                # Database not loaded yet
-                logger.warning("Attribute Error in close_polls loop")
-                logger.exception(ae)
-                pass
-            except Exception as ex:
-                # Never break this loop due to an error
-                logger.error("Other Error in close_polls loop")
-                logger.exception(ex)
-                pass
-
-            await asyncio.sleep(60)
+    # async def close_polls(self):
+    #     """This function runs every 60 seconds to schedule prepared polls and close expired polls"""
+    #     while True:
+    #         try:
+    #             if not hasattr(self.bot, 'db'):
+    #                 await asyncio.sleep(30)
+    #                 continue
+    #
+    #             query = self.bot.db.polls.find({'active': False, 'activation': {"$not": re.compile("0")}})
+    #             if query:
+    #                 for pd in [poll async for poll in query]:
+    #                     p = Poll(self.bot, load=True)
+    #                     await p.from_dict(pd)
+    #                     if not p.server:
+    #                         continue
+    #                     if p.active:
+    #                         try:
+    #                             await p.channel.send('This poll has been scheduled and is active now!')
+    #                             await p.post_embed(p.channel)
+    #                         except:
+    #                             continue
+    #
+    #             query = self.bot.db.polls.find({'open': True, 'duration': {"$not": re.compile("0")}})
+    #             if query:
+    #                 for pd in [poll async for poll in query]:
+    #                     p = Poll(self.bot, load=True)
+    #                     await p.from_dict(pd)
+    #                     if not p.server:
+    #                         continue
+    #                     if not p.open:
+    #                         try:
+    #                             await p.channel.send('This poll has reached the deadline and is closed!')
+    #                             await p.post_embed(p.channel)
+    #                         except:
+    #                             continue
+    #         except AttributeError as ae:
+    #             # Database not loaded yet
+    #             logger.warning("Attribute Error in close_polls loop")
+    #             logger.exception(ae)
+    #             pass
+    #         except Exception as ex:
+    #             # Never break this loop due to an error
+    #             logger.error("Other Error in close_polls loop")
+    #             logger.exception(ex)
+    #             pass
+    #
+    #         await asyncio.sleep(60)
 
     def get_lock(self, server_id):
         if not self.bot.locks.get(server_id):
