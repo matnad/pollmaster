@@ -189,7 +189,7 @@ class Poll:
             if not in_reply:
                 raise InvalidInput
             min_len = 3
-            max_len = 200
+            max_len = 400
             in_reply = self.sanitize_string(in_reply)
             if not in_reply:
                 raise InvalidInput
@@ -219,7 +219,7 @@ class Poll:
                 await self.add_vaild(message, self.name)
                 break
             except InvalidInput:
-                await self.add_error(message, '**Keep the name between 3 and 200 valid characters**')
+                await self.add_error(message, '**Keep the poll question between 3 and 400 valid characters**')
 
     async def set_short(self, ctx, force=None):
         """Set the label of the Poll."""
