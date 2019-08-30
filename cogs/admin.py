@@ -24,6 +24,9 @@ class Admin(commands.Cog):
 
     @commands.command(aliases=['r'])
     async def reload(self, ctx, *, cog):
+        if cog == 'c':
+            cog = 'poll_controls'
+
         logger.info(f'Trying to reload cog: cogs.{cog}.')
 
         reply = ''
@@ -53,5 +56,5 @@ class Admin(commands.Cog):
 
 def setup(bot):
     global logger
-    logger = logging.getLogger('bot')
+    logger = logging.getLogger('discord')
     bot.add_cog(Admin(bot))
