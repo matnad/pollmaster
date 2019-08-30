@@ -8,13 +8,15 @@ These steps have been tested on Ubuntu 19.04 with miniconda for Python 3.7 and D
 
 ## Installation
 
-- conda create --name pollmaster
-- conda activate pollmaster
-- git clone https://github.com/matnad/pollmaster.git
-- cd pollmaster
-- conda install pip
-- ~/miniconda3/envs/pollmaster/bin/pip install -r requirements.txt
-
+Execute the following commands from a terminal window:
+```sh
+conda create --name pollmaster
+conda activate pollmaster
+git clone https://github.com/matnad/pollmaster.git
+cd pollmaster
+conda install pip
+~/miniconda3/envs/pollmaster/bin/pip install -r requirements.txt
+```
 ##  Setup app and bot in Discord 
 
 - Setup an app and a bot using [Creating a Bot Account](https://discordpy.readthedocs.io/en/latest/discord.html#creating-a-bot-account)
@@ -22,7 +24,7 @@ These steps have been tested on Ubuntu 19.04 with miniconda for Python 3.7 and D
 ## Running the application
 
 - start a mongodb container using docker run -it -d -p 27017:27017 --name mongodb mongo
-- Create a secrets.py. You can use the following template
+- Create a secrets.py in essentials folder in the project. You can use the following template
 
 ```python
 class Secrets:
