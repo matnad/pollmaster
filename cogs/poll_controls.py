@@ -886,7 +886,15 @@ class PollControls(commands.Cog):
         if not isinstance(channel, discord.DMChannel) and p.anonymous:
             # immediately remove reaction and to be safe, remove all reactions
             self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
-            self.bot.loop.create_task(message.remove_reaction(emoji, user))
+            await message.remove_reaction(emoji, user)
+
+            # clean up all reactions (prevent lingering reactions)
+            for rct in message.reactions:
+                if rct.count > 1:
+                    async for user in rct.users():
+                        if user == self.bot.user:
+                            continue
+                        self.bot.loop.create_task(rct.remove(user))
 
         # order here is crucial since we can't determine if a reaction was removed by the bot or user
         # update database with vote
