@@ -736,8 +736,11 @@ class PollControls(commands.Cog):
         if not isinstance(p, Poll):
             return
 
+        member = server.get_member(user_id)
+
         # export
         if emoji == '📎':
+            self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
             # sending file
             file_name = await p.export()
             if file_name is not None:
@@ -748,8 +751,8 @@ class PollControls(commands.Cog):
             return
 
         # info
-        member = server.get_member(user_id)
         if emoji == '❔':
+            self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
             is_open = await p.is_open()
             embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
                                   description='', color=SETTINGS.color)
