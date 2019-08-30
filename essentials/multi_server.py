@@ -23,13 +23,13 @@ async def get_pre(bot, message):
 async def get_server_pre(bot, server):
     """Gets the prefix for a server."""
     try:
-        #result = await bot.db.config.find_one({'_id': str(server.id)})
-        result = bot.pre[str(server.id)]
+        # result = await bot.db.config.find_one({'_id': str(server.id)})
+        result = bot.pre.get(str(server.id), 'pm!')
     except AttributeError:
         return 'pm!'
-    if not result: #or not result.get('prefix'):
+    if not result:
         return 'pm!'
-    return result #result.get('prefix')
+    return result
 
 
 async def get_servers(bot, message, short=None):
