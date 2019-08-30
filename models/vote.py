@@ -1,5 +1,6 @@
 from bson import ObjectId
 
+
 class Vote:
     def __init__(
             self,

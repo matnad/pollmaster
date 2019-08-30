@@ -4,23 +4,21 @@ import datetime
 import logging
 import os
 import random
+from string import ascii_lowercase
+from uuid import uuid4
 
 import dateparser
+import discord
 import pytz
 import regex
-import discord
-
-from uuid import uuid4
-from string import ascii_lowercase
-
 from bson import ObjectId
 from matplotlib import rcParams
 from matplotlib.afm import AFM
 from pytz import UnknownTimeZoneError
 from unidecode import unidecode
 
-from essentials.multi_server import get_pre
 from essentials.exceptions import *
+from essentials.multi_server import get_pre
 from essentials.settings import SETTINGS
 from models.vote import Vote
 from utils.misc import possible_timezones
@@ -1103,7 +1101,6 @@ class Poll:
             return None
 
     async def from_dict(self, d):
-
         self.id = ObjectId(str(d['_id']))
         self.server = self.bot.get_guild(int(d['server_id']))
         self.channel = self.bot.get_channel(int(d['channel_id']))
