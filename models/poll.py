@@ -4,6 +4,7 @@ import datetime
 import logging
 import os
 import random
+import re
 from string import ascii_lowercase
 from uuid import uuid4
 
@@ -69,6 +70,7 @@ class Poll:
             self.multiple_choice = 1
             self.options_reaction = ['yes', 'no']
             self.options_reaction_default = False
+            self.options_reaction_emoji_only = False
             self.survey_flags = []
             # self.options_traditional = []
             # self.options_traditional_default = False
@@ -737,7 +739,7 @@ class Poll:
                     force = None
                 else:
                     reply = await self.get_user_reply(ctx)
-                print(reply)
+                # print(reply)
                 w_n = await get_valid(reply, self.server.roles)
                 self.weights_roles = w_n[0]
                 self.weights_numbers = w_n[1]
@@ -1135,6 +1137,19 @@ class Poll:
 
         self.options_reaction = d['options_reaction']
         self.options_reaction_default = d['reaction_default']
+
+        # check if emoji only
+        self.options_reaction_emoji_only = True
+        for reaction in self.options_reaction:
+            if reaction not in self.bot.emoji_dict:
+                e_id = re.findall(r':(\d+)>', reaction)
+                emoji = None
+                if e_id:
+                    emoji = self.bot.get_emoji(int(e_id[0]))
+                if not emoji or emoji.guild_id != self.server.id:
+                    self.options_reaction_emoji_only = False
+                    break
+
         # self.options_traditional = d['options_traditional']
 
         # backwards compatibility
@@ -1293,11 +1308,15 @@ class Poll:
                     head += f'(With up to {self.multiple_choice} choices):'
             # embed = self.add_field_custom(name='**Options**', value=text, embed=embed)
             options_text = '**' + head + '**\n'
+            # display options
             for i, r in enumerate(self.options_reaction):
                 custom_icon = ''
                 if i in self.survey_flags:
                     custom_icon = '🖊'
-                options_text += f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {r}'
+                if self.options_reaction_emoji_only:
+                    options_text += f'{r}{custom_icon}'
+                else:
+                    options_text += f':regional_indicator_{ascii_lowercase[i]}:{custom_icon} {r}'
                 if self.hide_count and self.open:
                     options_text += '\n'
                 else:
@@ -1325,7 +1344,10 @@ class Poll:
                 return msg
             else:
                 for i, r in enumerate(self.options_reaction):
-                    await msg.add_reaction(AZ_EMOJIS[i])
+                    if self.options_reaction_emoji_only:
+                        await msg.add_reaction(r)
+                    else:
+                        await msg.add_reaction(AZ_EMOJIS[i])
                 await msg.add_reaction('❔')
                 return msg
         elif not await self.is_open():
@@ -1410,13 +1432,6 @@ class Poll:
         else:
             return 'Poll is closed.'
 
-    # def count_votes(self, option, weighted=True):
-    #     """option: number from 0 to n"""
-    #     if weighted:
-    #         return sum([self.votes[c]['weight'] for c in [u for u in self.votes] if option in self.votes[c]['choices']])
-    #     else:
-    #         return sum([1 for c in [u for u in self.votes] if option in self.votes[c]['choices']])
-
     async def vote(self, user, option, message):
         if not await self.is_open():
             # refresh to show closed poll
@@ -1434,6 +1449,11 @@ class Poll:
         else:
             if option in AZ_EMOJIS:
                 choice = AZ_EMOJIS.index(option)
+            elif self.options_reaction_emoji_only:
+                for i, opts in enumerate(self.options_reaction):
+                    if option in opts:
+                        choice = i
+
         if choice == 'invalid':
             return
 
@@ -1495,108 +1515,6 @@ class Poll:
         if not self.hide_count:
             self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
 
-    # async def vote(self, user, option, message, lock):
-    #     if not await self.is_open():
-    #         # refresh to show closed poll
-    #         await message.edit(embed=await self.generate_embed())
-    #         await message.clear_reactions()
-    #         return
-    #     elif not await self.is_active():
-    #         return
-    #
-    #     choice = 'invalid'
-    #     # refresh_poll = True
-    #
-    #     # get weight
-    #     weight = 1
-    #     if self.weights_roles.__len__() > 0:
-    #         valid_weights = [self.weights_numbers[self.weights_roles.index(r)] for r in
-    #                          list(set([n.name for n in user.roles]).intersection(set(self.weights_roles)))]
-    #         if valid_weights.__len__() > 0:
-    #             weight = max(valid_weights)
-    #
-    #     if str(user.id) not in self.votes:
-    #         self.votes[str(user.id)] = {'weight': weight, 'choices': [], 'answers': []}
-    #     else:
-    #         self.votes[str(user.id)]['weight'] = weight
-    #
-    #     if self.options_reaction_default:
-    #         if option in self.options_reaction:
-    #             choice = self.options_reaction.index(option)
-    #     else:
-    #         if option in AZ_EMOJIS:
-    #             choice = AZ_EMOJIS.index(option)
-    #
-    #     if choice != 'invalid':
-    #         # if self.multiple_choice != 1: # more than 1 choice (0 = no limit)
-    #         if choice in self.votes[str(user.id)]['choices']:
-    #             if self.anonymous:
-    #                 # anonymous multiple choice -> can't unreact so we toggle with react
-    #                 logger.warning("Unvoting, should not happen for non anon polls.")
-    #                 await self.unvote(user, option, message, lock)
-    #             # refresh_poll = False
-    #         else:
-    #             if self.multiple_choice > 0 and self.votes[str(user.id)]['choices'].__len__() >= self.multiple_choice:
-    #                 # # auto unvote for single choice non anonymous
-    #                 # if self.votes[str(user.id)]['choices'].__len__() == 1 and not self.anonymous:
-    #                 #     prev_choice = self.votes[str(user.id)]['choices'][0]
-    #                 #     if self.options_reaction_default:
-    #                 #         emoji = self.options_reaction[prev_choice]
-    #                 #     else:
-    #                 #         emoji = AZ_EMOJIS[prev_choice]
-    #                 #     await message.remove_reaction(emoji, user)
-    #                 # else:
-    #                 say_text = f'You have reached the **maximum choices of {self.multiple_choice}** for this poll. ' \
-    #                            f'Before you can vote again, you need to unvote one of your choices.\n' \
-    #                            f'Your current choices are:\n'
-    #                 for c in self.votes[str(user.id)]['choices']:
-    #                     if self.options_reaction_default:
-    #                         say_text += f'{self.options_reaction[c]}\n'
-    #                     else:
-    #                         say_text += f'{AZ_EMOJIS[c]} {self.options_reaction[c]}\n'
-    #                 embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
-    #                 embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
-    #                 await user.send(embed=embed)
-    #                 # refresh_poll = False
-    #                 return
-    #             else:
-    #                 if choice in self.survey_flags:
-    #                     if len(self.votes[str(user.id)]['answers']) != len(self.survey_flags):
-    #                         self.votes[str(user.id)]['answers'] = ['' for i in range(len(self.survey_flags))]
-    #                     custom_input = await self.ask_for_input_DM(
-    #                         user,
-    #                         "Custom Answer",
-    #                         "For this vote option you can provide a custom reply. "
-    #                         "Note that everyone will be able to see the answer. If you don't want to provide a "
-    #                         "custom answer, type \"-\""
-    #                     )
-    #                     if not custom_input or custom_input.lower() == "-":
-    #                         custom_input = "No Answer"
-    #                     self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = custom_input
-    #
-    #                 self.votes[str(user.id)]['choices'].append(choice)
-    #                 self.votes[str(user.id)]['choices'] = list(set(self.votes[str(user.id)]['choices']))
-    #                 if self.anonymous and self.hide_count:
-    #                     await user.send(f'Your vote for **{self.options_reaction[choice]}** has been counted.')
-    #         # else:
-    #         #     if [choice] == self.votes[user.id]['choices']:
-    #         #         # refresh_poll = False
-    #         #         # if self.anonymous:
-    #         #         # undo anonymous vote
-    #         #         await self.unvote(user, option, message, lock)
-    #         #         return
-    #         #     else:
-    #         #         self.votes[user.id]['choices'] = [choice]
-    #
-    #     else:
-    #         # unknow emoji
-    #         return
-    #
-    #     # commit
-    #     await self.save_to_db()
-    #     if not self.hide_count:
-    #         asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
-
     async def unvote(self, user, option, message):
         if not await self.is_open():
             # refresh to show closed poll
@@ -1614,6 +1532,11 @@ class Poll:
         else:
             if option in AZ_EMOJIS:
                 choice = AZ_EMOJIS.index(option)
+            elif self.options_reaction_emoji_only:
+                for i, opts in enumerate(self.options_reaction):
+                    if option in opts:
+                        choice = i
+
         if choice == 'invalid':
             return
 
@@ -1626,41 +1549,5 @@ class Poll:
         elif self.anonymous:
             self.bot.loop.create_task(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
 
-    # async def unvote(self, user, option, message, lock):
-    #     if not await self.is_open():
-    #         # refresh to show closed poll
-    #         await message.edit(embed=await self.generate_embed())
-    #         if not isinstance(message.channel, discord.abc.PrivateChannel):
-    #             await message.clear_reactions()
-    #         return
-    #     elif not await self.is_active():
-    #         return
-    #
-    #     if str(user.id) not in self.votes:
-    #         return
-    #
-    #     choice = 'invalid'
-    #
-    #     if self.options_reaction_default:
-    #         if option in self.options_reaction:
-    #             choice = self.options_reaction.index(option)
-    #     else:
-    #         if option in AZ_EMOJIS:
-    #             choice = AZ_EMOJIS.index(option)
-    #
-    #     if choice != 'invalid' and choice in self.votes[str(user.id)]['choices']:
-    #         try:
-    #             if choice in self.survey_flags and len(self.votes[str(user.id)]['answers']) == len(self.survey_flags):
-    #                 self.votes[str(user.id)]['answers'][self.survey_flags.index(choice)] = ''
-    #             self.votes[str(user.id)]['choices'].remove(choice)
-    #             await self.save_to_db()
-    #             if not self.hide_count:
-    #                 asyncio.ensure_future(message.edit(embed=await self.generate_embed()))
-    #             elif self.anonymous:
-    #                 await user.send(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
-    #         except ValueError:
-    #             pass
-
     def has_required_role(self, user):
         return not set([r.name for r in user.roles]).isdisjoint(self.roles)
-

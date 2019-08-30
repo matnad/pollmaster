@@ -1,3 +1,4 @@
+import json
 import sys
 import traceback
 
@@ -56,6 +57,10 @@ async def on_ready():
     bot.db = mongo.pollmaster
     bot.session = aiohttp.ClientSession()
     print(bot.db)
+
+    # load emoji list
+    with open('utils/emoji-compact.json', encoding='utf-8') as emojson:
+        bot.emoji_dict = json.load(emojson)
 
     # check discord server configs
     try:

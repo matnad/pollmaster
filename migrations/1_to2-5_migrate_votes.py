@@ -1,4 +1,9 @@
-#  Script to enter votes in a separate table
+#  SCRIPT TO MIGRATE DATABASE FROM BEFORE VERSION 2.5 TO BE COMPATIBLE WITH 2.5
+#  You only need to run this if you want your polls created before 2.5 to be compatible with 2.5
+#  All polls created after the update to 2.5 will be created properly.
+#
+#  Will translate the "votes" field into a new database table.
+#  No longer need to load and lock the full poll to add or remove votes
 
 import asyncio
 
