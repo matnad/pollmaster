@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import logging
+import random
 import shlex
 import time
 
@@ -8,6 +9,7 @@ import discord
 import pytz
 from bson import ObjectId
 from discord.ext import tasks, commands
+from string import ascii_lowercase
 
 from essentials.exceptions import StopWizard
 from essentials.multi_server import get_server_pre, ask_for_server, ask_for_channel
@@ -145,7 +147,7 @@ class PollControls(commands.Cog):
                 return True
             else:
                 if error_msg is not None:
-                    await ctx.send(ctx.message.author, error_msg)
+                    await ctx.message.author.send(error_msg)
                 return False
 
     async def say_error(self, ctx, error_text, footer_text=None):
@@ -397,6 +399,68 @@ class PollControls(commands.Cog):
                 pre = await get_server_pre(self.bot, server)
                 footer = f'Type {pre}show to display all polls'
                 await self.say_error(ctx, error, footer)
+
+    @commands.command()
+    async def draw(self, ctx, short=None, opt=None):
+        server = await ask_for_server(self.bot, ctx.message, short)
+        if not server:
+            return
+        pre = await get_server_pre(self.bot, ctx.message.guild)
+        if opt is None:
+            error = f'No answer specified please use the following syntax: \n' \
+                f'`{pre}draw <poll_label> <answer_letter>`'
+            await self.say_error(ctx, error)
+            return
+        if short is None:
+            error = f'Please specify the label of a poll after the export command. \n' \
+                f'`{pre}export <poll_label>`'
+            await self.say_error(ctx, error)
+            return
+
+        p = await Poll.load_from_db(self.bot, server.id, short)
+        if p is not None:
+            if p.options_reaction_default or p.options_reaction_emoji_only:
+                error = f'Can\'t draw from emoji-only polls.'
+                await self.say_error(ctx, error)
+                return
+            error = f'Insufficient permissions for this command.'
+            if not p.author:
+                p.author.id = None
+            if not await self.is_admin_or_creator(ctx, server, p.author.id, error_msg=error):
+                return
+            try:
+                choice = ascii_lowercase.index(opt.lower())
+            except ValueError:
+                choice = 99
+            if len(p.options_reaction) <= choice:
+                error = f'Invalid answer "{opt}".'
+                await self.say_error(ctx, error)
+                return
+            if p.open:
+                await ctx.invoke(self.close, short=short)
+            await p.load_full_votes()
+            voter_list = []
+            for vote in p.full_votes:
+                if vote.choice == choice:
+                    voter_list.append(vote.user_id)
+            if not voter_list:
+                error = f'No votes for option "{opt}".'
+                await self.say_error(ctx, error)
+                return
+            print(voter_list)
+            winner_id = random.choice(voter_list)
+            winner = server.get_member(int(winner_id))
+            if not winner:
+                error = f'Invalid winner drawn (id: {winner_id}).'
+                await self.say_error(ctx, error)
+                return
+            text = f'The winner is: {winner.mention}'
+            title = f'Drawing a random winner from "{opt.upper()}"...'
+            await self.say_embed(ctx, text, title=title)
+        else:
+            error = f'Poll with label "{short}" was not found.'
+            await self.say_error(ctx, error)
+            await ctx.invoke(self.show)
 
     @commands.command()
     async def cmd(self, ctx, *, cmd=None):

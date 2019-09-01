@@ -5,7 +5,8 @@
 - Documentation on how to host your own instance: `setup.md`
 
 ## Important note for self-hosted bots
-Version 2.5 include breaking database changes.<br />
+- Update requirements: `pip install -r requirements.txt`
+- Version 2.5 include breaking database changes.<br />
 To ensure old polls are compatible with the newest version you need to run:<br />
 `migrations/1_to2-5_migrate_votes.py`
 
@@ -17,9 +18,9 @@ To ensure old polls are compatible with the newest version you need to run:<br /
 - Purge reactions for anonymous and hidden polls more rigorously
 - Paperclip and ?-Emojis now reset after clicking
 - Question from 200 to 400 max. characters
+- Increased time until timeout when using the wizard
 - Improved Error messages
 - Lots of refactoring and minor improvements
-
 # Changelog for Version 2.4
 
 ## New features
