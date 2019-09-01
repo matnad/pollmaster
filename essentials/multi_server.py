@@ -23,13 +23,13 @@ async def get_pre(bot, message):
 async def get_server_pre(bot, server):
     """Gets the prefix for a server."""
     try:
-        #result = await bot.db.config.find_one({'_id': str(server.id)})
-        result = bot.pre[str(server.id)]
+        # result = await bot.db.config.find_one({'_id': str(server.id)})
+        result = bot.pre.get(str(server.id), 'pm!')
     except AttributeError:
         return 'pm!'
-    if not result: #or not result.get('prefix'):
+    if not result:
         return 'pm!'
-    return result #result.get('prefix')
+    return result
 
 
 async def get_servers(bot, message, short=None):
@@ -84,7 +84,7 @@ async def ask_for_server(bot, message, short=None):
             def check(m):
                 return message.author == m.author
             try:
-                reply = await bot.wait_for('message', timeout=60, check=check)
+                reply = await bot.wait_for('message', timeout=120, check=check)
             except asyncio.TimeoutError:
                 pass
             else:
@@ -148,7 +148,7 @@ async def ask_for_channel(ctx, bot, server, message):
         def check(m):
             return message.author.id == m.author.id
         try:
-            reply = await bot.wait_for('message', timeout=60, check=check)
+            reply = await bot.wait_for('message', timeout=120, check=check)
         except asyncio.TimeoutError:
             pass
         else:

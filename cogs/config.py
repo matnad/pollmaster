@@ -8,11 +8,15 @@ class Config(commands.Cog):
     @commands.command()
     @commands.has_permissions(manage_guild=True)
     async def prefix(self, ctx, *, pre):
-        '''Set a custom prefix for the server.'''
+        """Set a custom prefix for the server."""
         server = ctx.message.guild
         if pre.endswith('\w'):
             pre = pre[:-2]+' '
-            msg = f'The server prefix has been set to `{pre}` Use `{pre}prefix <prefix>` to change it again.'
+            if len(pre.strip) > 0:
+                msg = f'The server prefix has been set to `{pre}` Use `{pre}prefix <prefix>` to change it again.'
+            else:
+                await ctx.send('Invalid prefix.')
+                return
         else:
             msg = f'The server prefix has been set to `{pre}` Use `{pre}prefix <prefix>` to change it again. ' \
                   f'If you would like to add a trailing whitespace to the prefix, use `{pre}prefix {pre}\w`.'
@@ -24,7 +28,7 @@ class Config(commands.Cog):
     @commands.command()
     @commands.has_permissions(manage_guild=True)
     async def adminrole(self, ctx, *, role=None):
-        '''Set or show the Admin Role. Members with this role can create polls and manage ALL polls. Parameter: <role> (optional)'''
+        """Set or show the Admin Role. Members with this role can create polls and manage ALL polls. Parameter: <role> (optional)"""
         server = ctx.message.guild
 
         if not role:
@@ -46,7 +50,8 @@ class Config(commands.Cog):
     @commands.command()
     @commands.has_permissions(manage_guild=True)
     async def userrole(self, ctx, *, role=None):
-        '''Set or show the User Role. Members with this role can create polls and manage their own polls. Parameter: <role> (optional)'''
+        """Set or show the User Role. Members with this role can create polls and manage their own polls. 
+        Parameter: <role> (optional)"""
         server = ctx.message.guild
 
         if not role:
@@ -65,7 +70,8 @@ class Config(commands.Cog):
         else:
             await ctx.send(f'Server role `{role}` not found.')
 
+
 def setup(bot):
     global logger
-    logger = logging.getLogger('bot')
+    logger = logging.getLogger('discord')
     bot.add_cog(Config(bot))

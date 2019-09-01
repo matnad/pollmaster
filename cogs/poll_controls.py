@@ -1,22 +1,21 @@
 import argparse
-import asyncio
 import datetime
 import logging
-import re
 import shlex
+import time
 
 import discord
 import pytz
+from bson import ObjectId
+from discord.ext import tasks, commands
 
-from discord.ext import commands
-
-from utils.misc import CustomFormatter
-from models.poll import Poll
-from utils.paginator import embed_list_paginated
+from essentials.exceptions import StopWizard
 from essentials.multi_server import get_server_pre, ask_for_server, ask_for_channel
 from essentials.settings import SETTINGS
+from models.poll import Poll
+from utils.misc import CustomFormatter
+from utils.paginator import embed_list_paginated
 from utils.poll_name_generator import generate_word
-from essentials.exceptions import StopWizard
 
 # A-Z Emojis for Discord
 AZ_EMOJIS = [(b'\\U0001f1a'.replace(b'a', bytes(hex(224 + (6 + i))[2:], "utf-8"))).decode("unicode-escape") for i in
@@ -26,12 +25,104 @@ AZ_EMOJIS = [(b'\\U0001f1a'.replace(b'a', bytes(hex(224 + (6 + i))[2:], "utf-8")
 class PollControls(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.bot.loop.create_task(self.close_polls())
         self.ignore_next_removed_reaction = {}
+        self.index = 0
+        self.close_activate_polls.start()
 
-    # # General Methods
+    def cog_unload(self):
+        self.close_activate_polls.cancel()
 
-    def get_label(self, message: discord.Message):
+    # noinspection PyCallingNonCallable
+    @tasks.loop(seconds=30)
+    async def close_activate_polls(self):
+        if hasattr(self.bot, 'db'):
+            utc_now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+
+            # auto-close polls
+            query = self.bot.db.polls.find({'open': True, 'duration': {
+                '$gte': utc_now - datetime.timedelta(minutes=15),
+                '$lte': utc_now + datetime.timedelta(minutes=1)
+            }})
+            if query:
+                for limit, pd in enumerate([poll async for poll in query]):
+                    if limit >= 10:
+                        print("More than 10 polls due to be closed! Throttling to 10 per 30 sec.")
+                        logger.warning("More than 10 polls due to be closed! Throttling to 10 per 30 sec.")
+                        break
+
+                    # load poll (this will close the poll if necessary and update the DB)
+                    p = Poll(self.bot, load=True)
+                    await p.from_dict(pd)
+
+                    # Check if Pollmaster is still present on the server
+                    if not p.server:
+                        # Bot is not present on that server. Close poll directly in the DB.
+                        await self.bot.db.polls.update_one({'_id': p.id}, {'$set': {'open': False}})
+                        logger.info(f"Closed poll on a server ({pd['server_id']}) without Pollmaster being present.")
+                        continue
+                    # Check if poll was closed and inform the sever if the poll is less than 2 hours past due
+                    # (Closing old polls should only happen if the bot was offline for an extended period)
+                    if not p.open:
+                        if p.duration.replace(tzinfo=pytz.utc) >= utc_now - datetime.timedelta(hours=2):
+                            # only send messages for polls that were supposed to expire in the past 2 hours
+                            await p.channel.send('This poll has reached the deadline and is closed!')
+                            await p.post_embed(p.channel)
+                        else:
+                            logger.info(f"Closing old poll: {p.id}")
+
+            # auto-activate polls
+            query = self.bot.db.polls.find({'active': False, 'activation': {
+                '$gte': utc_now - datetime.timedelta(minutes=15),
+                '$lte': utc_now + datetime.timedelta(minutes=1)
+            }})
+            if query:
+                for limit, pd in enumerate([poll async for poll in query]):
+                    if limit >= 10:
+                        print("More than 10 polls due to be closed! Throttling to 10 per 30 sec.")
+                        logger.warning("More than 10 polls due to be closed! Throttling to 10 per 30 sec.")
+                        break
+
+                    # load poll (this will activate the poll if necessary and update the DB)
+                    p = Poll(self.bot, load=True)
+                    await p.from_dict(pd)
+
+                    # Check if Pollmaster is still present on the server
+                    if not p.server:
+                        # Bot is not present on that server. Close poll directly in the DB.
+                        await self.bot.db.polls.update_one({'_id': p.id}, {'$set': {'active': True}})
+                        logger.info(f"Activated poll on a server ({pd['server_id']}) without Pollmaster being present.")
+                        continue
+                    # Check if poll was activated and inform the sever if the poll is less than 2 hours past due
+                    # (activating old polls should only happen if the bot was offline for an extended period)
+                    if p.active:
+                        if p.activation.replace(tzinfo=pytz.utc) >= utc_now - datetime.timedelta(hours=2):
+                            # only send messages for polls that were supposed to expire in the past 2 hours
+                            await p.channel.send('This poll has been scheduled and is active now!')
+                            await p.post_embed(p.channel)
+                        else:
+                            logger.info(f"Activating old poll: {p.id}")
+
+    @tasks.loop(seconds=5)
+    async def close_activate_polls(self):
+        remove_list = []
+        for pid, t in self.bot.refresh_blocked.items():
+            if t-time.time() < 0:
+                remove_list.append(pid)
+                if self.bot.refresh_queue.get(pid, False):
+                    query = await self.bot.db.polls.find_one({'_id': ObjectId(pid)})
+                    if query:
+                        p = Poll(self.bot, load=True)
+                        await p.from_dict(query)
+                        await p.refresh(self.bot.refresh_queue.get(pid))
+                        del self.bot.refresh_queue[pid]
+
+        # don't change dict while iterating
+        for pid in remove_list:
+            del self.bot.refresh_blocked[pid]
+
+    # General Methods
+    @staticmethod
+    def get_label(message: discord.Message):
         label = None
         if message and message.embeds:
             embed = message.embeds[0]
@@ -41,59 +132,6 @@ class PollControls(commands.Cog):
                 if label_full and label_full.startswith('>> '):
                     label = label_full[3:]
         return label
-
-    async def close_polls(self):
-        """This function runs every 60 seconds to schedule prepared polls and close expired polls"""
-        while True:
-            try:
-                if not hasattr(self.bot, 'db'):
-                    await asyncio.sleep(30)
-                    continue
-
-                query = self.bot.db.polls.find({'active': False, 'activation': {"$not": re.compile("0")}})
-                if query:
-                    for pd in [poll async for poll in query]:
-                        p = Poll(self.bot, load=True)
-                        await p.from_dict(pd)
-                        if not p.server:
-                            continue
-                        if p.active:
-                            try:
-                                await p.channel.send('This poll has been scheduled and is active now!')
-                                await p.post_embed(p.channel)
-                            except:
-                                continue
-
-                query = self.bot.db.polls.find({'open': True, 'duration': {"$not": re.compile("0")}})
-                if query:
-                    for pd in [poll async for poll in query]:
-                        p = Poll(self.bot, load=True)
-                        await p.from_dict(pd)
-                        if not p.server:
-                            continue
-                        if not p.open:
-                            try:
-                                await p.channel.send('This poll has reached the deadline and is closed!')
-                                await p.post_embed(p.channel)
-                            except:
-                                continue
-            except AttributeError as ae:
-                # Database not loaded yet
-                logger.warning("Attribute Error in close_polls loop")
-                logger.exception(ae)
-                pass
-            except Exception as ex:
-                # Never break this loop due to an error
-                logger.error("Other Error in close_polls loop")
-                logger.exception(ex)
-                pass
-
-            await asyncio.sleep(60)
-
-    def get_lock(self, server_id):
-        if not self.bot.locks.get(server_id):
-            self.bot.locks[server_id] = asyncio.Lock()
-        return self.bot.locks.get(server_id)
 
     async def is_admin_or_creator(self, ctx, server, owner_id, error_msg=None):
         member = server.get_member(ctx.message.author.id)
@@ -125,6 +163,15 @@ class PollControls(commands.Cog):
         await ctx.send(embed=embed)
 
     # Commands
+    # @commands.command()
+    # async def t(self, ctx, *, test=None):
+    #     """TEST"""
+    #     server = await ask_for_server(self.bot, ctx.message)
+    #     if not server:
+    #         return
+    #     p = await Poll.load_from_db(self.bot, str(server.id), 'test', ctx=ctx)
+    #     print(await Vote.load_number_of_voters_for_poll(self.bot, p.id))
+
     @commands.command()
     async def activate(self, ctx, *, short=None):
         """Activate a prepared poll. Parameter: <label>"""
@@ -135,7 +182,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the activate command. \n' \
-                    f'`{pre}activate <poll_label>`'
+                f'`{pre}activate <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -164,14 +211,14 @@ class PollControls(commands.Cog):
 
     @commands.command()
     async def delete(self, ctx, *, short=None):
-        '''Delete a poll. Parameter: <label>'''
+        """Delete a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
         if not server:
             return
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the delete command. \n' \
-                    f'`{pre}delete <poll_label>`'
+                f'`{pre}delete <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -191,7 +238,8 @@ class PollControls(commands.Cog):
                     title = 'Poll deleted'
                     await self.say_embed(ctx, say, title)
                 else:
-                    error = f'Action failed. Poll could not be deleted. You should probably report his error to the dev, thanks!'
+                    error = f'Action failed. Poll could not be deleted. ' \
+                        f'You should probably report his error to the dev, thanks!'
                     await self.say_error(ctx, error)
 
             else:
@@ -202,7 +250,7 @@ class PollControls(commands.Cog):
 
     @commands.command()
     async def close(self, ctx, *, short=None):
-        '''Close a poll. Parameter: <label>'''
+        """Close a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
         if not server:
             return
@@ -210,7 +258,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the close command. \n' \
-                    f'`{pre}close <poll_label>`'
+                f'`{pre}close <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -236,7 +284,7 @@ class PollControls(commands.Cog):
 
     @commands.command()
     async def copy(self, ctx, *, short=None):
-        '''Copy a poll. Parameter: <label>'''
+        """Copy a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
         if not server:
             return
@@ -244,7 +292,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the copy command. \n' \
-                    f'`{pre}copy <poll_label>`'
+                f'`{pre}copy <poll_label>`'
             await self.say_error(ctx, error)
 
         else:
@@ -261,7 +309,7 @@ class PollControls(commands.Cog):
 
     @commands.command()
     async def export(self, ctx, *, short=None):
-        '''Export a poll. Parameter: <label>'''
+        """Export a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
         if not server:
             return
@@ -269,14 +317,15 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the export command. \n' \
-                    f'`{pre}export <poll_label>`'
+                f'`{pre}export <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
             if p is not None:
                 if p.open:
                     pre = await get_server_pre(self.bot, ctx.message.guild)
-                    error_text = f'You can only export closed polls. \nPlease `{pre}close {short}` the poll first or wait for the deadline.'
+                    error_text = f'You can only export closed polls. \n' \
+                        f'Please `{pre}close {short}` the poll first or wait for the deadline.'
                     await self.say_error(ctx, error_text)
                 else:
                     # sending file
@@ -302,7 +351,8 @@ class PollControls(commands.Cog):
 
     @commands.command()
     async def show(self, ctx, short='open', start=0):
-        '''Show a list of open polls or show a specific poll. Parameters: "open" (default), "closed", "prepared" or <label>'''
+        """Show a list of open polls or show a specific poll.
+        Parameters: "open" (default), "closed", "prepared" or <label>"""
 
         server = await ask_for_server(self.bot, ctx.message, short)
         if not server:
@@ -350,7 +400,7 @@ class PollControls(commands.Cog):
 
     @commands.command()
     async def cmd(self, ctx, *, cmd=None):
-        '''The old, command style way paired with the wizard.'''
+        """The old, command style way paired with the wizard."""
         # await self.say_embed(ctx, say_text='This command is temporarily disabled.')
 
         server = await ask_for_server(self.bot, ctx.message)
@@ -361,7 +411,7 @@ class PollControls(commands.Cog):
             # generate the argparser and handle invalid stuff
             descr = 'Accept poll settings via commandstring. \n\n' \
                     '**Wrap all arguments in quotes like this:** \n' \
-                    f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
+                f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
                     'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
                     'If an argument is invalid, the wizard will step in. ' \
                     'If the command string is invalid, you will get this error :)'
@@ -408,10 +458,10 @@ class PollControls(commands.Cog):
 
             if unknown_args:
                 error_text = f'**There was an error reading the command line options!**.\n' \
-                             f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
-                             f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
-                             f'\n\nHere are the arguments I could not understand:\n'
-                error_text += '`'+'\n'.join(unknown_args)+'`'
+                    f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
+                    f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
+                    f'\n\nHere are the arguments I could not understand:\n'
+                error_text += '`' + '\n'.join(unknown_args) + '`'
                 error_text += f'\n\nHere are the arguments which are ok:\n'
                 error_text += '`' + '\n'.join([f'{k}: {v}' for k, v in vars(args).items()]) + '`'
 
@@ -440,10 +490,9 @@ class PollControls(commands.Cog):
             logger.error("ERROR IN pm!cmd")
             logger.exception(error)
 
-
     @commands.command()
     async def quick(self, ctx, *, cmd=None):
-        '''Create a quick poll with just a question and some options. Parameters: <Question> (optional)'''
+        """Create a quick poll with just a question and some options. Parameters: <Question> (optional)"""
         server = await ask_for_server(self.bot, ctx.message)
         if not server:
             return
@@ -548,15 +597,15 @@ class PollControls(commands.Cog):
             if result and result.get('admin_role') not in [r.name for r in member.roles] and result.get(
                     'user_role') not in [r.name for r in member.roles]:
                 await ctx.message.author.send('You don\'t have sufficient rights to start new polls on this server. '
-                                            'A server administrator has to assign the user or admin role to you. '
-                                            f'To view and set the permissions, an admin can use `{pre}userrole` and '
-                                            f'`{pre}adminrole`')
+                                              'A server administrator has to assign the user or admin role to you. '
+                                              f'To view and set the permissions, an admin can use `{pre}userrole` and '
+                                              f'`{pre}adminrole`')
                 return
 
-        ## Create object
+        # Create object
         poll = Poll(self.bot, ctx, server, channel)
 
-        ## Route to define object, passed as argument for different constructors
+        # Route to define object, passed as argument for different constructors
         if ctx.message and ctx.message.content and not ctx.message.content.startswith(f'{pre}cmd '):
             poll.wizard_messages.append(ctx.message)
         try:
@@ -575,8 +624,6 @@ class PollControls(commands.Cog):
     async def on_raw_reaction_remove(self, data):
         # get emoji symbol
         emoji = data.emoji
-        if emoji:
-            emoji = emoji.name
         if not emoji:
             return
 
@@ -630,15 +677,12 @@ class PollControls(commands.Cog):
         else:
             return
 
-        # this is exclusive
-        lock = self.get_lock(server.id)
-        async with lock:
-            p = await Poll.load_from_db(self.bot, server.id, label)
-            if not isinstance(p, Poll):
-                return
-            if not p.anonymous:
-                # for anonymous polls we can't unvote because we need to hide reactions
-                await p.unvote(user, emoji, message, lock)
+        p = await Poll.load_from_db(self.bot, server.id, label)
+        if not isinstance(p, Poll):
+            return
+        if not p.anonymous:
+            # for anonymous polls we can't unvote because we need to hide reactions
+            await p.unvote(user, emoji.name, message)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, data):
@@ -649,8 +693,8 @@ class PollControls(commands.Cog):
 
         # get emoji symbol
         emoji = data.emoji
-        if emoji:
-            emoji = emoji.name
+        # if emoji:
+        #     emoji_name = emoji.name
         if not emoji:
             return
 
@@ -679,9 +723,8 @@ class PollControls(commands.Cog):
             if not label:
                 return
             server = await ask_for_server(self.bot, message, label)
-
         elif not channel:
-            # discord rapidly closes dm channels by desing
+            # discord rapidly closes dm channels by design
             # put private channels back into the bots cache and try again
             user = await self.bot.fetch_user(user_id)  # only do this once
             await user.create_dm()
@@ -697,183 +740,178 @@ class PollControls(commands.Cog):
         else:
             return
 
-        # fetch poll
-        # create message object for the reaction sender, to get correct server
-        # user_msg = copy.deepcopy(message)
-        # user_msg.author = user
-        # server = await ask_for_server(self.bot, user_msg, label)
+        p = await Poll.load_from_db(self.bot, server.id, label)
+        if not isinstance(p, Poll):
+            return
 
-        # this is exclusive to keep database access sequential
-        # hopefully it will scale well enough or I need a different solution
-        lock = self.get_lock(server.id)
-        async with lock:
-            p = await Poll.load_from_db(self.bot, server.id, label)
-            if not isinstance(p, Poll):
-                return
+        member = server.get_member(user_id)
 
-            # export
-            if emoji == '📎':
-                # sending file
-                file_name = await p.export()
-                if file_name is not None:
-                    await user.send('Sending you the requested export of "{}".'.format(p.short),
-                                              file=discord.File(file_name)
-                                              )
-                return
+        # export
+        if emoji.name == '📎':
+            self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
+            # sending file
+            file_name = await p.export()
+            if file_name is not None:
+                self.bot.loop.create_task(user.send('Sending you the requested export of "{}".'.format(p.short),
+                                                    file=discord.File(file_name)
+                                                    )
+                                          )
+            return
 
-            # info
-            member = server.get_member(user_id)
-            if emoji == '❔':
-                is_open = await p.is_open()
-                embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
-                                      description='', color=SETTINGS.color)
-                embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
+        # info
+        if emoji.name == '❔':
+            self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
+            is_open = await p.is_open()
+            embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
+                                  description='', color=SETTINGS.color)
+            embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
 
-                # created by
-                created_by = server.get_member(int(p.author.id))
-                embed.add_field(name=f'Created by:', value=f'{created_by if created_by else "<Deleted User>"}', inline=False)
+            # created by
+            created_by = server.get_member(int(p.author.id))
+            embed.add_field(name=f'Created by:', value=f'{created_by if created_by else "<Deleted User>"}',
+                            inline=False)
 
-                # vote rights
-                vote_rights = await p.has_required_role(member)
-                embed.add_field(name=f'{"Can you vote?" if is_open else "Could you vote?"}',
-                                value=f'{"✅" if vote_rights else "❎"}', inline=False)
+            # vote rights
+            vote_rights = p.has_required_role(member)
+            embed.add_field(name=f'{"Can you vote?" if is_open else "Could you vote?"}',
+                            value=f'{"✅" if vote_rights else "❎"}', inline=False)
 
-                # edit rights
-                edit_rights = False
-                if str(member.id) == str(p.author.id):
+            # edit rights
+            edit_rights = False
+            if str(member.id) == str(p.author.id):
+                edit_rights = True
+            elif member.guild_permissions.manage_guild:
+                edit_rights = True
+            else:
+                result = await self.bot.db.config.find_one({'_id': str(server.id)})
+                if result and result.get('admin_role') in [r.name for r in member.roles]:
                     edit_rights = True
-                elif member.guild_permissions.manage_guild:
-                    edit_rights = True
-                else:
-                    result = await self.bot.db.config.find_one({'_id': str(server.id)})
-                    if result and result.get('admin_role') in [r.name for r in member.roles]:
-                        edit_rights = True
-                embed.add_field(name='Can you manage the poll?', value=f'{"✅" if edit_rights else "❎"}', inline=False)
+            embed.add_field(name='Can you manage the poll?', value=f'{"✅" if edit_rights else "❎"}', inline=False)
 
-                # choices
-                choices = 'You have not voted yet.' if vote_rights else 'You can\'t vote in this poll.'
-                if str(user.id) in p.votes:
-                    if p.votes[str(user.id)]['choices'].__len__() > 0:
-                        choices = ', '.join([p.options_reaction[c] for c in p.votes[str(user.id)]['choices']])
-                embed.add_field(
-                    name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
-                    value=choices, inline=False)
+            # choices
+            user_votes = await p.load_votes_for_user(user.id)
+            choices = 'You have not voted yet.' if vote_rights else 'You can\'t vote in this poll.'
+            if user_votes and len(user_votes) > 0:
+                choices = ', '.join([p.options_reaction[v.choice] for v in user_votes])
+            embed.add_field(
+                name=f'{"Your current votes (can be changed as long as the poll is open):" if is_open else "Your final votes:"}',
+                value=choices, inline=False)
 
-                # weight
-                if vote_rights:
-                    weight = 1
-                    if p.weights_roles.__len__() > 0:
-                        valid_weights = [p.weights_numbers[p.weights_roles.index(r)] for r in
-                                         list(set([n.name for n in member.roles]).intersection(set(p.weights_roles)))]
-                        if valid_weights.__len__() > 0:
-                            weight = max(valid_weights)
-                else:
-                    weight = 'You can\'t vote in this poll.'
-                embed.add_field(name='Weight of your votes:', value=weight, inline=False)
+            # weight
+            if vote_rights:
+                weight = 1
+                if len(p.weights_roles) > 0:
+                    valid_weights = [p.weights_numbers[p.weights_roles.index(r)] for r in
+                                     list(set([n.name for n in member.roles]).intersection(set(p.weights_roles)))]
+                    if len(valid_weights) > 0:
+                        weight = max(valid_weights)
+            else:
+                weight = 'You can\'t vote in this poll.'
+            embed.add_field(name='Weight of your votes:', value=weight, inline=False)
 
-                # time left
-                deadline = p.get_duration_with_tz()
-                if not is_open:
-                    time_left = 'This poll is closed.'
-                elif deadline == 0:
-                    time_left = 'Until manually closed.'
-                else:
-                    time_left = str(deadline - datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
+            # time left
+            deadline = p.get_duration_with_tz()
+            if not is_open:
+                time_left = 'This poll is closed.'
+            elif deadline == 0:
+                time_left = 'Until manually closed.'
+            else:
+                time_left = str(deadline - datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
 
-                embed.add_field(name='Time left in the poll:', value=time_left, inline=False)
+            embed.add_field(name='Time left in the poll:', value=time_left, inline=False)
 
-                await user.send(embed=embed)
+            await user.send(embed=embed)
 
-                # send current details of who currently voted for what
-                if (not p.open or not p.hide_count) and not p.anonymous and p.votes.__len__() > 0:
-                    msg = '--------------------------------------------\n' \
-                              'CURRENT VOTES\n' \
-                              '--------------------------------------------\n'
-                    for i, o in enumerate(p.options_reaction):
-                        if not p.options_reaction_default:
+            await p.load_full_votes()
+            # await p.load_vote_counts()
+            await p.load_unique_participants()
+            # send current details of who currently voted for what
+            if (not p.open or not p.hide_count) and not p.anonymous and len(p.full_votes) > 0:
+                msg = '--------------------------------------------\n' \
+                      'VOTES\n' \
+                      '--------------------------------------------\n'
+                for i, o in enumerate(p.options_reaction):
+                    if not p.options_reaction_default and not p.options_reaction_emoji_only:
                             msg += AZ_EMOJIS[i] + " "
-                        msg += "**" +o+":**"
-                        c = 0
-                        for user_id in p.votes:
-                            member = server.get_member(int(user_id))
-                            if not member or i not in p.votes[str(user_id)]['choices']:
-                                continue
-                            c += 1
-                            name = member.nick
-                            if not name:
-                                name = member.name
-                            if not name:
-                                name = "<Deleted User>"
-                            msg += f'\n{name}'
-                            if p.votes[str(user_id)]['weight'] != 1:
-                                msg += f' (weight: {p.votes[str(user_id)]["weight"]})'
-                            # msg += ': ' + ', '.join([AZ_EMOJIS[c]+" "+p.options_reaction[c] for c in p.votes[user_id]['choices']])
-                            if i in p.survey_flags:
-                                msg += f': {p.votes[str(user_id)]["answers"][p.survey_flags.index(i)]}'
-                            if msg.__len__() > 1500:
-                                await user.send(msg)
-                                msg = ''
-                        if c == 0:
-                            msg += '\nNo votes for this option yet.'
-                        msg += '\n\n'
-
-                    if msg.__len__() > 0:
-                        await user.send(msg)
-                elif (not p.open or not p.hide_count) and p.anonymous and p.survey_flags.__len__() > 0 and p.votes.__len__() > 0:
-                    msg = '--------------------------------------------\n' \
-                          'Custom Answers (Anonymous)\n' \
-                          '--------------------------------------------\n'
-                    has_answers = False
-                    for i, o in enumerate(p.options_reaction):
-                        if i not in p.survey_flags:
+                    msg += "**" + o + ":**"
+                    c = 0
+                    for vote in p.full_votes:
+                        member = server.get_member(int(vote.user_id))
+                        if not member or vote.choice != i:
                             continue
-                        custom_answers = ''
-                        for user_id in p.votes:
-                            if i in p.votes[str(user_id)]["choices"]:
-                                has_answers = True
-                                custom_answers += f'\n{p.votes[str(user_id)]["answers"][p.survey_flags.index(i)]}'
-                        if custom_answers.__len__() > 0:
-                            msg += AZ_EMOJIS[i] + " "
-                            msg += "**" + o + ":**"
-                            msg += custom_answers
-                            msg += '\n\n'
-                        if msg.__len__() > 1500:
+                        c += 1
+                        name = member.nick
+                        if not name:
+                            name = member.name
+                        if not name:
+                            name = "<Deleted User>"
+                        msg += f'\n{name}'
+                        if i in p.survey_flags:
+                            msg += f': {vote.answer}'
+                        if len(msg) > 1500:
                             await user.send(msg)
                             msg = ''
-                    if has_answers and msg.__len__() > 0:
+                    if c == 0:
+                        msg += '\nNo votes for this option yet.'
+                    msg += '\n\n'
+
+                if len(msg) > 0:
+                    await user.send(msg)
+            elif (not p.open or not p.hide_count) and p.anonymous and len(p.survey_flags) > 0 and len(p.full_votes) > 0:
+                msg = '--------------------------------------------\n' \
+                      'Custom Answers (Anonymous)\n' \
+                      '--------------------------------------------\n'
+                has_answers = False
+                for i, o in enumerate(p.options_reaction):
+                    if i not in p.survey_flags:
+                        continue
+                    custom_answers = ''
+                    for vote in p.full_votes:
+                        if vote.choice == i:
+                            has_answers = True
+                            custom_answers += f'\n{vote.answer}'
+                    if len(custom_answers) > 0:
+                        if not p.options_reaction_emoji_only:
+                            msg += AZ_EMOJIS[i] + " "
+                        msg += "**" + o + ":**"
+                        msg += custom_answers
+                        msg += '\n\n'
+                    if len(msg) > 1500:
                         await user.send(msg)
-                return
+                        msg = ''
+                if has_answers and len(msg) > 0:
+                    await user.send(msg)
+            return
 
-            # Assume: User wants to vote with reaction
-            # no rights, terminate function
-            if not await p.has_required_role(member):
-                await message.remove_reaction(emoji, user)
-                await member.send(f'You are not allowed to vote in this poll. Only users with '
-                                  f'at least one of these roles can vote:\n{", ".join(p.roles)}')
-                return
+        # Assume: User wants to vote with reaction
+        # no rights, terminate function
+        if not p.has_required_role(member):
+            await message.remove_reaction(emoji, user)
+            await member.send(f'You are not allowed to vote in this poll. Only users with '
+                              f'at least one of these roles can vote:\n{", ".join(p.roles)}')
+            return
 
-            # check if we need to remove reactions (this will trigger on_reaction_remove)
-            if not isinstance(channel, discord.DMChannel) and p.anonymous:
-                # immediately remove reaction and to be safe, remove all reactions
-                self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
-                asyncio.ensure_future(message.remove_reaction(emoji, user))
+        # check if we need to remove reactions (this will trigger on_reaction_remove)
+        if not isinstance(channel, discord.DMChannel) and (p.anonymous or p.hide_count):
+            # immediately remove reaction and to be safe, remove all reactions
+            self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
+            await message.remove_reaction(emoji, user)
 
-            # order here is crucial since we can't determine if a reaction was removed by the bot or user
-            # update database with vote
-            await p.vote(member, emoji, message, lock)
+            # clean up all reactions (prevent lingering reactions)
+            for rct in message.reactions:
+                if rct.count > 1:
+                    async for user in rct.users():
+                        if user == self.bot.user:
+                            continue
+                        self.ignore_next_removed_reaction[str(message.id) + str(rct.emoji)] = user_id
+                        self.bot.loop.create_task(rct.remove(user))
 
-            # cant do this until we figure out how to see who removed the reaction?
-            # for now MC 1 is like MC x
-            # if isinstance(channel, discord.TextChannel) and p.multiple_choice == 1:
-            #     # remove all other reactions
-            #     # if lock._waiters.__len__() == 0:
-            #     for r in message.reactions:
-            #         if r.emoji and r.emoji != emoji:
-            #             await message.remove_reaction(r.emoji, user)
-            #     pass
+        # order here is crucial since we can't determine if a reaction was removed by the bot or user
+        # update database with vote
+        await p.vote(member, emoji.name, message)
 
 
 def setup(bot):
     global logger
-    logger = logging.getLogger('bot')
+    logger = logging.getLogger('discord')
     bot.add_cog(PollControls(bot))

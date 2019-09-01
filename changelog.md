@@ -1,3 +1,43 @@
+# Changelog for Version 2.5
+
+## New features
+- Emoji-Only polls are now supported, including custom, uploaded emojis!
+- Documentation on how to host your own instance: `setup.md`
+
+## Important note for self-hosted bots
+Version 2.5 include breaking database changes.<br />
+To ensure old polls are compatible with the newest version you need to run:<br />
+`migrations/1_to2-5_migrate_votes.py`
+
+## Changes and Fixes
+- Most libraries updated and adjusted code. Migrated to tasks.loop
+- Votes are now stored in a separated database table to speed up parallel access
+- Refresh Queue and Blocking: Max. 1 refresh per ~5 seconds -> improved performance for large polls
+- Polls with hidden votes now remove reactions
+- Purge reactions for anonymous and hidden polls more rigorously
+- Paperclip and ?-Emojis now reset after clicking
+- Question from 200 to 400 max. characters
+- Improved Error messages
+- Lots of refactoring and minor improvements
+
+# Changelog for Version 2.4
+
+## New features
+- Write in answers (survey flags) per option
+- Option to hide vote count while the poll is running
+- Copying polls now possible (pm!copy)
+- The text messages to create a poll (spam) will now delete after the poll is created
+- @mention command (prefix independent)
+- Admin module with hot-reloading to make patching easier
+
+## Changes and Fixes
+- Split pm!new into pm!new (basic poll) and pm!advanced (all features)
+- Polls should now activate and close properly
+- Poll info shows current votes
+- pm!cmd is enabled again! Hopefully it works this time...
+- Channel selection in PM bug fixed
+
+
 # Changelog for Version 2.2
 
 ## New features

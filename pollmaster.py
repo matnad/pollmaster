@@ -1,3 +1,4 @@
+import json
 import sys
 import traceback
 
@@ -25,12 +26,16 @@ bot_config = {
 bot = commands.AutoShardedBot(**bot_config)
 bot.remove_command('help')
 
+bot.message_cache = MessageCache(bot)
+bot.refresh_blocked = {}
+bot.refresh_queue = {}
+
 # logger
 # create logger with 'spam_application'
-logger = logging.getLogger('bot')
+logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 # create file handler which logs even debug messages
-fh = logging.FileHandler('pollmaster.log')
+fh = logging.FileHandler('pollmaster.log',  encoding='utf-8', mode='w')
 fh.setLevel(logging.DEBUG)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
@@ -57,6 +62,10 @@ async def on_ready():
     bot.session = aiohttp.ClientSession()
     print(bot.db)
 
+    # load emoji list
+    with open('utils/emoji-compact.json', encoding='utf-8') as emojson:
+        bot.emoji_dict = json.load(emojson)
+
     # check discord server configs
     try:
         db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
@@ -68,25 +77,21 @@ async def on_ready():
                     {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
                     upsert=True
                 )
-
     except:
         print("Problem verifying servers.")
 
     # cache prefixes
     bot.pre = {entry['_id']: entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
 
-    bot.locks = {}
-    bot.message_cache = MessageCache(bot)
-
-    game = discord.Game("Democracy 4")
-    await bot.change_presence(status=discord.Status.online, activity=game)
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="pm!help"))
 
     print("Servers verified. Bot running.")
+
 
 @bot.event
 async def on_command_error(ctx, e):
 
-    if ctx.cog.qualified_name == "Admin":
+    if hasattr(ctx.cog, 'qualified_name') and ctx.cog.qualified_name == "Admin":
         # Admin cog handles the errors locally
         return
 
@@ -99,6 +104,7 @@ async def on_command_error(ctx, e):
             commands.NoPrivateMessage,
             commands.CheckFailure,
             commands.CommandOnCooldown,
+            commands.MissingPermissions
         )
 
         if isinstance(e, ignored_exceptions):
