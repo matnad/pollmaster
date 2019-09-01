@@ -26,6 +26,10 @@ bot_config = {
 bot = commands.AutoShardedBot(**bot_config)
 bot.remove_command('help')
 
+bot.message_cache = MessageCache(bot)
+bot.refresh_blocked = {}
+bot.refresh_queue = {}
+
 # logger
 # create logger with 'spam_application'
 logger = logging.getLogger('discord')
@@ -73,20 +77,17 @@ async def on_ready():
                     {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
                     upsert=True
                 )
-
     except:
         print("Problem verifying servers.")
 
     # cache prefixes
     bot.pre = {entry['_id']: entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
 
-    bot.locks = {}
-    bot.message_cache = MessageCache(bot)
-
     game = discord.Game("Democracy 4")
     await bot.change_presence(status=discord.Status.online, activity=game)
 
     print("Servers verified. Bot running.")
+
 
 @bot.event
 async def on_command_error(ctx, e):
@@ -104,6 +105,7 @@ async def on_command_error(ctx, e):
             commands.NoPrivateMessage,
             commands.CheckFailure,
             commands.CommandOnCooldown,
+            commands.MissingPermissions
         )
 
         if isinstance(e, ignored_exceptions):

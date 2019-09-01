@@ -2,9 +2,11 @@ import argparse
 import datetime
 import logging
 import shlex
+import time
 
 import discord
 import pytz
+from bson import ObjectId
 from discord.ext import tasks, commands
 
 from essentials.exceptions import StopWizard
@@ -99,6 +101,24 @@ class PollControls(commands.Cog):
                             await p.post_embed(p.channel)
                         else:
                             logger.info(f"Activating old poll: {p.id}")
+
+    @tasks.loop(seconds=5)
+    async def close_activate_polls(self):
+        remove_list = []
+        for pid, t in self.bot.refresh_blocked.items():
+            if t-time.time() < 0:
+                remove_list.append(pid)
+                if self.bot.refresh_queue.get(pid, False):
+                    query = await self.bot.db.polls.find_one({'_id': ObjectId(pid)})
+                    if query:
+                        p = Poll(self.bot, load=True)
+                        await p.from_dict(query)
+                        await p.refresh(self.bot.refresh_queue.get(pid))
+                        del self.bot.refresh_queue[pid]
+
+        # don't change dict while iterating
+        for pid in remove_list:
+            del self.bot.refresh_blocked[pid]
 
     # General Methods
     @staticmethod
@@ -604,8 +624,6 @@ class PollControls(commands.Cog):
     async def on_raw_reaction_remove(self, data):
         # get emoji symbol
         emoji = data.emoji
-        if emoji:
-            emoji = emoji.name
         if not emoji:
             return
 
@@ -664,7 +682,7 @@ class PollControls(commands.Cog):
             return
         if not p.anonymous:
             # for anonymous polls we can't unvote because we need to hide reactions
-            await p.unvote(user, emoji, message)
+            await p.unvote(user, emoji.name, message)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, data):
@@ -675,8 +693,8 @@ class PollControls(commands.Cog):
 
         # get emoji symbol
         emoji = data.emoji
-        if emoji:
-            emoji = emoji.name
+        # if emoji:
+        #     emoji_name = emoji.name
         if not emoji:
             return
 
@@ -722,16 +740,6 @@ class PollControls(commands.Cog):
         else:
             return
 
-        # fetch poll
-        # create message object for the reaction sender, to get correct server
-        # user_msg = copy.deepcopy(message)
-        # user_msg.author = user
-        # server = await ask_for_server(self.bot, user_msg, label)
-
-        # this is exclusive to keep database access sequential
-        # hopefully it will scale well enough or I need a different solution
-        # lock = self.get_lock(server.id)
-        # async with lock:
         p = await Poll.load_from_db(self.bot, server.id, label)
         if not isinstance(p, Poll):
             return
@@ -739,7 +747,7 @@ class PollControls(commands.Cog):
         member = server.get_member(user_id)
 
         # export
-        if emoji == '📎':
+        if emoji.name == '📎':
             self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
             # sending file
             file_name = await p.export()
@@ -751,7 +759,7 @@ class PollControls(commands.Cog):
             return
 
         # info
-        if emoji == '❔':
+        if emoji.name == '❔':
             self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
             is_open = await p.is_open()
             embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
@@ -823,8 +831,8 @@ class PollControls(commands.Cog):
                       'VOTES\n' \
                       '--------------------------------------------\n'
                 for i, o in enumerate(p.options_reaction):
-                    if not p.options_reaction_default:
-                        msg += AZ_EMOJIS[i] + " "
+                    if not p.options_reaction_default and not p.options_reaction_emoji_only:
+                            msg += AZ_EMOJIS[i] + " "
                     msg += "**" + o + ":**"
                     c = 0
                     for vote in p.full_votes:
@@ -838,9 +846,6 @@ class PollControls(commands.Cog):
                         if not name:
                             name = "<Deleted User>"
                         msg += f'\n{name}'
-                        # if p.votes[str(user_id)]['weight'] != 1:
-                        #     msg += f' (weight: {p.votes[str(user_id)]["weight"]})'
-                        # msg += ': ' + ', '.join([AZ_EMOJIS[c]+" "+p.options_reaction[c] for c in p.votes[user_id]['choices']])
                         if i in p.survey_flags:
                             msg += f': {vote.answer}'
                         if len(msg) > 1500:
@@ -866,7 +871,8 @@ class PollControls(commands.Cog):
                             has_answers = True
                             custom_answers += f'\n{vote.answer}'
                     if len(custom_answers) > 0:
-                        msg += AZ_EMOJIS[i] + " "
+                        if not p.options_reaction_emoji_only:
+                            msg += AZ_EMOJIS[i] + " "
                         msg += "**" + o + ":**"
                         msg += custom_answers
                         msg += '\n\n'
@@ -886,7 +892,7 @@ class PollControls(commands.Cog):
             return
 
         # check if we need to remove reactions (this will trigger on_reaction_remove)
-        if not isinstance(channel, discord.DMChannel) and p.anonymous:
+        if not isinstance(channel, discord.DMChannel) and (p.anonymous or p.hide_count):
             # immediately remove reaction and to be safe, remove all reactions
             self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
             await message.remove_reaction(emoji, user)
@@ -897,21 +903,12 @@ class PollControls(commands.Cog):
                     async for user in rct.users():
                         if user == self.bot.user:
                             continue
+                        self.ignore_next_removed_reaction[str(message.id) + str(rct.emoji)] = user_id
                         self.bot.loop.create_task(rct.remove(user))
 
         # order here is crucial since we can't determine if a reaction was removed by the bot or user
         # update database with vote
-        await p.vote(member, emoji, message)
-
-        # cant do this until we figure out how to see who removed the reaction?
-        # for now MC 1 is like MC x
-        # if isinstance(channel, discord.TextChannel) and p.multiple_choice == 1:
-        #     # remove all other reactions
-        #     # if lock._waiters.__len__() == 0:
-        #     for r in message.reactions:
-        #         if r.emoji and r.emoji != emoji:
-        #             await message.remove_reaction(r.emoji, user)
-        #     pass
+        await p.vote(member, emoji.name, message)
 
 
 def setup(bot):

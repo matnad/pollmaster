@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import re
+import time
 from string import ascii_lowercase
 from uuid import uuid4
 
@@ -824,6 +825,7 @@ class Poll:
 
     def finalize(self):
         self.time_created = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        self.set_emoji_only()
 
     async def clean_up(self, channel):
         if isinstance(channel, discord.TextChannel):
@@ -1102,6 +1104,18 @@ class Poll:
         else:
             return None
 
+    def set_emoji_only(self):
+        self.options_reaction_emoji_only = True
+        for reaction in self.options_reaction:
+            if reaction not in self.bot.emoji_dict:
+                e_id = re.findall(r':(\d+)>', reaction)
+                emoji = None
+                if e_id:
+                    emoji = self.bot.get_emoji(int(e_id[0]))
+                if not emoji or emoji.guild_id != self.server.id:
+                    self.options_reaction_emoji_only = False
+                    break
+
     async def from_dict(self, d):
         self.id = ObjectId(str(d['_id']))
         self.server = self.bot.get_guild(int(d['server_id']))
@@ -1139,16 +1153,7 @@ class Poll:
         self.options_reaction_default = d['reaction_default']
 
         # check if emoji only
-        self.options_reaction_emoji_only = True
-        for reaction in self.options_reaction:
-            if reaction not in self.bot.emoji_dict:
-                e_id = re.findall(r':(\d+)>', reaction)
-                emoji = None
-                if e_id:
-                    emoji = self.bot.get_emoji(int(e_id[0]))
-                if not emoji or emoji.guild_id != self.server.id:
-                    self.options_reaction_emoji_only = False
-                    break
+        self.set_emoji_only()
 
         # self.options_traditional = d['options_traditional']
 
@@ -1232,7 +1237,8 @@ class Poll:
         embed.add_field(name=name, value=value, inline=False if w > 12500 and self.cursor_pos % 2 == 1 else True)
         self.cursor_pos += 1
 
-        # create an empty field if we are at the second slot and the width of the first slot is between the critical values
+        # create an empty field if we are at the second slot and the
+        # width of the first slot is between the critical values
         if self.cursor_pos % 2 == 1 and 11600 < w < 20000:
             embed.add_field(name='\u200b', value='\u200b', inline=True)
             self.cursor_pos += 1
@@ -1435,8 +1441,10 @@ class Poll:
     async def vote(self, user, option, message):
         if not await self.is_open():
             # refresh to show closed poll
-            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+            await self.refresh(message, force=True)
             self.bot.loop.create_task(message.clear_reactions())
+            self.bot.loop.create_task(message.add_reaction('❔'))
+            self.bot.loop.create_task(message.add_reaction('📎'))
             return
         elif not await self.is_active():
             return
@@ -1465,12 +1473,12 @@ class Poll:
             if len(valid_weights) > 0:
                 weight = max(valid_weights)
 
-        # unvote for anon
-        if self.anonymous:
+        # unvote for anon and hidden count
+        if self.anonymous or self.hide_count:
             vote = await Vote.load_from_db(self.bot, self.id, user.id, choice)
             if vote:
                 await vote.delete_from_db()
-                self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+                await self.refresh(message)
                 return
 
         # check if already voted for the same choice
@@ -1513,12 +1521,12 @@ class Poll:
         vote = Vote(self.bot, self.id, user.id, choice, weight, answer)
         await vote.save_to_db()
         if not self.hide_count:
-            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+            await self.refresh(message)
 
     async def unvote(self, user, option, message):
         if not await self.is_open():
             # refresh to show closed poll
-            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+            await self.refresh(message, force=True)
             self.bot.loop.create_task(message.clear_reactions())
             return
         elif not await self.is_active():
@@ -1545,9 +1553,20 @@ class Poll:
             await vote.delete_from_db()
 
         if not self.hide_count:
-            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
+            await self.refresh(message)
         elif self.anonymous:
             self.bot.loop.create_task(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
 
     def has_required_role(self, user):
         return not set([r.name for r in user.roles]).isdisjoint(self.roles)
+
+    async def refresh(self, message, await_=False, force=False):
+        # dont refresh if there was a refresh in the past 5 seconds
+        if not force and self.bot.refresh_blocked.get(str(self.id), 0)-time.time() > 0:
+            self.bot.refresh_queue[str(self.id)] = message
+            return
+        self.bot.refresh_blocked[str(self.id)] = time.time() + 5
+        if await_:
+            await message.edit(embed=await self.generate_embed())
+        else:
+            self.bot.loop.create_task(message.edit(embed=await self.generate_embed()))
