@@ -84,7 +84,7 @@ async def ask_for_server(bot, message, short=None):
             def check(m):
                 return message.author == m.author
             try:
-                reply = await bot.wait_for('message', timeout=60, check=check)
+                reply = await bot.wait_for('message', timeout=120, check=check)
             except asyncio.TimeoutError:
                 pass
             else:
@@ -148,7 +148,7 @@ async def ask_for_channel(ctx, bot, server, message):
         def check(m):
             return message.author.id == m.author.id
         try:
-            reply = await bot.wait_for('message', timeout=60, check=check)
+            reply = await bot.wait_for('message', timeout=120, check=check)
         except asyncio.TimeoutError:
             pass
         else:

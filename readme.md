@@ -1,4 +1,4 @@
-# Pollmaster V 2.4
+# Pollmaster V 2.5
 
 ## Overview
 
@@ -7,13 +7,13 @@ With Pollmaster you can very easily create and manage complex polls on your serv
 Here is a quick list of features:
 
 - Voting works with reactions (users don't need to type anything)
-- Anonymous voting is possible
-- You can hide the current vote count to prevent sheeping
+- Anonymous voting is possible!
 - Polls can be single choice, multiple choice or restricted to a specific number of choices
 - You can prepare polls in advance and schedule them to a date and time or manually activate them
 - Polls can be given a deadline or they can be open until closed manually
 - You can restrict which roles are allowed to participate
 - You can assign weights to roles to count their votes more or less
+- You can hide the current vote count to prevent sheeping
 - Polls are persistent and will be available until you delete them
 - Personalised info for each poll by reacting with ❔
 - Everything can be done in private chat with the bot to reduce spam on the server

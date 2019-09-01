@@ -155,7 +155,7 @@ class Poll:
         def check(m):
             return m.author == self.author
         try:
-            reply = await self.bot.wait_for('message', timeout=180, check=check)
+            reply = await self.bot.wait_for('message', timeout=360, check=check)
         except asyncio.TimeoutError:
             raise StopWizard
 
@@ -826,6 +826,9 @@ class Poll:
     def finalize(self):
         self.time_created = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
         self.set_emoji_only()
+        # no duplicates in emoji only reactions
+        if self.options_reaction_emoji_only:
+            self.options_reaction = list(dict.fromkeys(self.options_reaction))
 
     async def clean_up(self, channel):
         if isinstance(channel, discord.TextChannel):
@@ -840,7 +843,7 @@ class Poll:
             return m.author == user
 
         try:
-            reply = await self.bot.wait_for('message', timeout=120, check=check)
+            reply = await self.bot.wait_for('message', timeout=180, check=check)
             if reply and reply.content:
                 reply = reply.content
             else:
@@ -1496,7 +1499,9 @@ class Poll:
                 if self.options_reaction_default:
                     say_text += f'{self.options_reaction[v.choice]}\n'
                 else:
-                    say_text += f'{AZ_EMOJIS[v.choice]} {self.options_reaction[v.choice]}\n'
+                    if not self.options_reaction_emoji_only:
+                        say_text += f'{AZ_EMOJIS[v.choice]} '
+                    say_text += f'{self.options_reaction[v.choice]}\n'
             embed = discord.Embed(title='', description=say_text, colour=SETTINGS.color)
             embed.set_author(name='Pollmaster', icon_url=SETTINGS.author_icon)
             self.bot.loop.create_task(user.send(embed=embed))

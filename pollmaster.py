@@ -83,8 +83,7 @@ async def on_ready():
     # cache prefixes
     bot.pre = {entry['_id']: entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
 
-    game = discord.Game("Democracy 4")
-    await bot.change_presence(status=discord.Status.online, activity=game)
+    await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="pm!help"))
 
     print("Servers verified. Bot running.")
 
