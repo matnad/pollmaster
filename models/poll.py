@@ -1281,7 +1281,9 @@ class Poll:
 
         # embed = self.add_field_custom(name='**Author**', value=self.author.name, embed=embed)
         await self.load_vote_counts()
-        if self.options_reaction_default:
+        if self.hide_count and self.is_open():
+            embed = self.add_field_custom(name="**Score**", value="*hidden*", embed=embed)
+        elif self.options_reaction_default:
             if await self.is_open():
                 text = f'**Score** '
                 if self.multiple_choice == 0:
