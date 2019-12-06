@@ -7,7 +7,7 @@ chardet==3.0.4
 cycler==0.10.0
 dateparser==0.7.1
 dblpy==0.3.2
-discord.py==1.2.3
+discord.py==1.2.5
 idna==2.8
 idna-ssl==1.1.0
 kiwisolver==1.0.1
