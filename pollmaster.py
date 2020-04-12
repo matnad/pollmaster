@@ -16,6 +16,7 @@ from essentials.settings import SETTINGS
 
 bot_config = {
     'command_prefix': get_pre,
+    'case_insensitive': True,
     'pm_help': False,
     'status': discord.Status.online,
     'owner_id': SETTINGS.owner_id,
@@ -54,6 +55,24 @@ for ext in extensions:
 
 
 @bot.event
+async def on_message(message):
+    # allow case insensitive prefix
+    prefix = await get_pre(bot, message)
+    if type(prefix) == tuple:
+        prefixes = (t.lower() for t in prefix)
+        for pfx in prefixes:
+            if len(pfx) >= 1 and message.content.lower().startswith(pfx.lower()):
+                # print("Matching", message.content, "with", pfx)
+                message.content = pfx + message.content[len(pfx):]
+                await bot.process_commands(message)
+                break
+    else:
+        if message.content.lower().startswith(prefix.lower()):
+            message.content = prefix + message.content[len(prefix):]
+            await bot.process_commands(message)
+
+
+@bot.event
 async def on_ready():
     bot.owner = await bot.fetch_user(SETTINGS.owner_id)
 
@@ -66,26 +85,26 @@ async def on_ready():
     with open('utils/emoji-compact.json', encoding='utf-8') as emojson:
         bot.emoji_dict = json.load(emojson)
 
-    # check discord server configs
-    try:
-        db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
-        for server in bot.guilds:
-            if str(server.id) not in db_server_ids:
-                # create new config entry
-                await bot.db.config.update_one(
-                    {'_id': str(server.id)},
-                    {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
-                    upsert=True
-                )
-    except:
-        print("Problem verifying servers.")
+    # # check discord server configs
+    # try:
+    #     db_server_ids = [entry['_id'] async for entry in bot.db.config.find({}, {})]
+    #     for server in bot.guilds:
+    #         if str(server.id) not in db_server_ids:
+    #             # create new config entry
+    #             await bot.db.config.update_one(
+    #                 {'_id': str(server.id)},
+    #                 {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
+    #                 upsert=True
+    #             )
+    # except:
+    #     print("Problem verifying servers.")
 
     # cache prefixes
-    bot.pre = {entry['_id']: entry['prefix'] async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
+    bot.pre = {entry['_id']: entry.get('prefix', 'pm!') async for entry in bot.db.config.find({}, {'_id', 'prefix'})}
 
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="pm!help"))
 
-    print("Servers verified. Bot running.")
+    print("Bot running.")
 
 
 @bot.event

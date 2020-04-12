@@ -4,12 +4,12 @@ import logging
 import random
 import shlex
 import time
+from string import ascii_lowercase
 
 import discord
 import pytz
 from bson import ObjectId
 from discord.ext import tasks, commands
-from string import ascii_lowercase
 
 from essentials.exceptions import StopWizard
 from essentials.multi_server import get_server_pre, ask_for_server, ask_for_channel
@@ -29,10 +29,13 @@ class PollControls(commands.Cog):
         self.bot = bot
         self.ignore_next_removed_reaction = {}
         self.index = 0
+        self.close_activate_polls.add_exception_type(KeyError)
         self.close_activate_polls.start()
+        self.refresh_queue.start()
 
     def cog_unload(self):
         self.close_activate_polls.cancel()
+        self.refresh_queue.cancel()
 
     # noinspection PyCallingNonCallable
     @tasks.loop(seconds=30)
@@ -47,13 +50,15 @@ class PollControls(commands.Cog):
             }})
             if query:
                 for limit, pd in enumerate([poll async for poll in query]):
-                    if limit >= 10:
-                        print("More than 10 polls due to be closed! Throttling to 10 per 30 sec.")
-                        logger.warning("More than 10 polls due to be closed! Throttling to 10 per 30 sec.")
+                    if limit >= 30:
+                        print("More than 30 polls due to be closed! Throttling to 30 per 30 sec.")
+                        logger.warning("More than 30 polls due to be closed! Throttling to 30 per 30 sec.")
                         break
 
                     # load poll (this will close the poll if necessary and update the DB)
                     p = Poll(self.bot, load=True)
+                    if not p:
+                        continue
                     await p.from_dict(pd)
 
                     # Check if Pollmaster is still present on the server
@@ -104,23 +109,34 @@ class PollControls(commands.Cog):
                         else:
                             logger.info(f"Activating old poll: {p.id}")
 
+    @close_activate_polls.before_loop
+    async def before_close_activate_polls(self):
+        print('close task waiting...')
+        await self.bot.wait_until_ready()
+
     @tasks.loop(seconds=5)
-    async def close_activate_polls(self):
+    async def refresh_queue(self):
         remove_list = []
         for pid, t in self.bot.refresh_blocked.items():
-            if t-time.time() < 0:
+            if t - time.time() < 0:
                 remove_list.append(pid)
                 if self.bot.refresh_queue.get(pid, False):
                     query = await self.bot.db.polls.find_one({'_id': ObjectId(pid)})
                     if query:
                         p = Poll(self.bot, load=True)
-                        await p.from_dict(query)
-                        await p.refresh(self.bot.refresh_queue.get(pid))
-                        del self.bot.refresh_queue[pid]
+                        if p:
+                            await p.from_dict(query)
+                            await p.refresh(self.bot.refresh_queue.get(pid))
+                            del self.bot.refresh_queue[pid]
 
         # don't change dict while iterating
         for pid in remove_list:
             del self.bot.refresh_blocked[pid]
+
+    @refresh_queue.before_loop
+    async def before_refresh_queue(self):
+        print('refresh task waiting...')
+        await self.bot.wait_until_ready()
 
     # General Methods
     @staticmethod
@@ -184,7 +200,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the activate command. \n' \
-                f'`{pre}activate <poll_label>`'
+                    f'`{pre}activate <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -220,7 +236,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the delete command. \n' \
-                f'`{pre}delete <poll_label>`'
+                    f'`{pre}delete <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -241,7 +257,7 @@ class PollControls(commands.Cog):
                     await self.say_embed(ctx, say, title)
                 else:
                     error = f'Action failed. Poll could not be deleted. ' \
-                        f'You should probably report his error to the dev, thanks!'
+                            f'You should probably report his error to the dev, thanks!'
                     await self.say_error(ctx, error)
 
             else:
@@ -260,7 +276,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the close command. \n' \
-                f'`{pre}close <poll_label>`'
+                    f'`{pre}close <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -294,7 +310,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the copy command. \n' \
-                f'`{pre}copy <poll_label>`'
+                    f'`{pre}copy <poll_label>`'
             await self.say_error(ctx, error)
 
         else:
@@ -319,7 +335,7 @@ class PollControls(commands.Cog):
         if short is None:
             pre = await get_server_pre(self.bot, ctx.message.guild)
             error = f'Please specify the label of a poll after the export command. \n' \
-                f'`{pre}export <poll_label>`'
+                    f'`{pre}export <poll_label>`'
             await self.say_error(ctx, error)
         else:
             p = await Poll.load_from_db(self.bot, server.id, short)
@@ -327,7 +343,7 @@ class PollControls(commands.Cog):
                 if p.open:
                     pre = await get_server_pre(self.bot, ctx.message.guild)
                     error_text = f'You can only export closed polls. \n' \
-                        f'Please `{pre}close {short}` the poll first or wait for the deadline.'
+                                 f'Please `{pre}close {short}` the poll first or wait for the deadline.'
                     await self.say_error(ctx, error_text)
                 else:
                     # sending file
@@ -408,12 +424,12 @@ class PollControls(commands.Cog):
         pre = await get_server_pre(self.bot, ctx.message.guild)
         if opt is None:
             error = f'No answer specified please use the following syntax: \n' \
-                f'`{pre}draw <poll_label> <answer_letter>`'
+                    f'`{pre}draw <poll_label> <answer_letter>`'
             await self.say_error(ctx, error)
             return
         if short is None:
             error = f'Please specify the label of a poll after the export command. \n' \
-                f'`{pre}export <poll_label>`'
+                    f'`{pre}export <poll_label>`'
             await self.say_error(ctx, error)
             return
 
@@ -424,8 +440,6 @@ class PollControls(commands.Cog):
                 await self.say_error(ctx, error)
                 return
             error = f'Insufficient permissions for this command.'
-            if not p.author:
-                p.author.id = None
             if not await self.is_admin_or_creator(ctx, server, p.author.id, error_msg=error):
                 return
             try:
@@ -447,7 +461,7 @@ class PollControls(commands.Cog):
                 error = f'No votes for option "{opt}".'
                 await self.say_error(ctx, error)
                 return
-            print(voter_list)
+            # print(voter_list)
             winner_id = random.choice(voter_list)
             winner = server.get_member(int(winner_id))
             if not winner:
@@ -475,7 +489,7 @@ class PollControls(commands.Cog):
             # generate the argparser and handle invalid stuff
             descr = 'Accept poll settings via commandstring. \n\n' \
                     '**Wrap all arguments in quotes like this:** \n' \
-                f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
+                    f'{pre}cmd -question \"What tea do you like?\" -o \"green, black, chai\"\n\n' \
                     'The Order of arguments doesn\'t matter. If an argument is missing, it will use the default value. ' \
                     'If an argument is invalid, the wizard will step in. ' \
                     'If the command string is invalid, you will get this error :)'
@@ -501,10 +515,10 @@ class PollControls(commands.Cog):
                 return
 
             try:
-                print(cmd)
+                # print(cmd)
                 cmd = cmd.replace('“', '"')  # fix for iphone keyboard
                 cmd = cmd.replace('”', '"')  # fix for iphone keyboard
-                print(cmd)
+                # print(cmd)
                 cmds = shlex.split(cmd)
             except ValueError:
                 await self.say_error(ctx, error_text=helpstring)
@@ -522,9 +536,9 @@ class PollControls(commands.Cog):
 
             if unknown_args:
                 error_text = f'**There was an error reading the command line options!**.\n' \
-                    f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
-                    f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
-                    f'\n\nHere are the arguments I could not understand:\n'
+                             f'Most likely this is because you didn\'t surround the arguments with double quotes like this: ' \
+                             f'`{pre}cmd -q "question of the poll" -o "yes, no, maybe"`' \
+                             f'\n\nHere are the arguments I could not understand:\n'
                 error_text += '`' + '\n'.join(unknown_args) + '`'
                 error_text += f'\n\nHere are the arguments which are ok:\n'
                 error_text += '`' + '\n'.join([f'{k}: {v}' for k, v in vars(args).items()]) + '`'
@@ -812,7 +826,9 @@ class PollControls(commands.Cog):
 
         # export
         if emoji.name == '📎':
+            self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
             self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
+
             # sending file
             file_name = await p.export()
             if file_name is not None:
@@ -823,10 +839,11 @@ class PollControls(commands.Cog):
             return
 
         # info
-        if emoji.name == '❔':
+        elif emoji.name == '❔':
+            self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
             self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
             is_open = await p.is_open()
-            embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.name}\"",
+            embed = discord.Embed(title=f"Info for the {'CLOSED ' if not is_open else ''}poll \"{p.short}\"",
                                   description='', color=SETTINGS.color)
             embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
 
@@ -896,7 +913,7 @@ class PollControls(commands.Cog):
                       '--------------------------------------------\n'
                 for i, o in enumerate(p.options_reaction):
                     if not p.options_reaction_default and not p.options_reaction_emoji_only:
-                            msg += AZ_EMOJIS[i] + " "
+                        msg += AZ_EMOJIS[i] + " "
                     msg += "**" + o + ":**"
                     c = 0
                     for vote in p.full_votes:
@@ -947,32 +964,33 @@ class PollControls(commands.Cog):
                     await user.send(msg)
             return
 
-        # Assume: User wants to vote with reaction
-        # no rights, terminate function
-        if not p.has_required_role(member):
-            await message.remove_reaction(emoji, user)
-            await member.send(f'You are not allowed to vote in this poll. Only users with '
-                              f'at least one of these roles can vote:\n{", ".join(p.roles)}')
-            return
+        else:
+            # Assume: User wants to vote with reaction
+            # no rights, terminate function
+            if not p.has_required_role(member):
+                await message.remove_reaction(emoji, user)
+                await member.send(f'You are not allowed to vote in this poll. Only users with '
+                                  f'at least one of these roles can vote:\n{", ".join(p.roles)}')
+                return
 
-        # check if we need to remove reactions (this will trigger on_reaction_remove)
-        if not isinstance(channel, discord.DMChannel) and (p.anonymous or p.hide_count):
-            # immediately remove reaction and to be safe, remove all reactions
-            self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
-            await message.remove_reaction(emoji, user)
+            # check if we need to remove reactions (this will trigger on_reaction_remove)
+            if not isinstance(channel, discord.DMChannel) and (p.anonymous or p.hide_count):
+                # immediately remove reaction and to be safe, remove all reactions
+                self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
+                await message.remove_reaction(emoji, user)
 
-            # clean up all reactions (prevent lingering reactions)
-            for rct in message.reactions:
-                if rct.count > 1:
-                    async for user in rct.users():
-                        if user == self.bot.user:
-                            continue
-                        self.ignore_next_removed_reaction[str(message.id) + str(rct.emoji)] = user_id
-                        self.bot.loop.create_task(rct.remove(user))
+                # clean up all reactions (prevent lingering reactions)
+                for rct in message.reactions:
+                    if rct.count > 1:
+                        async for user in rct.users():
+                            if user == self.bot.user:
+                                continue
+                            self.ignore_next_removed_reaction[str(message.id) + str(rct.emoji)] = user_id
+                            self.bot.loop.create_task(rct.remove(user))
 
-        # order here is crucial since we can't determine if a reaction was removed by the bot or user
-        # update database with vote
-        await p.vote(member, emoji.name, message)
+            # order here is crucial since we can't determine if a reaction was removed by the bot or user
+            # update database with vote
+            await p.vote(member, emoji.name, message)
 
 
 def setup(bot):

@@ -6,7 +6,7 @@ from essentials.settings import SETTINGS
 
 
 async def get_pre(bot, message):
-    '''Gets the prefix for a message.'''
+    """Gets the prefix for a message."""
     if isinstance(message.channel, discord.abc.PrivateChannel):
         shared_server_list = await get_servers(bot, message)
         if shared_server_list.__len__() == 0:
@@ -23,9 +23,15 @@ async def get_pre(bot, message):
 async def get_server_pre(bot, server):
     """Gets the prefix for a server."""
     try:
-        # result = await bot.db.config.find_one({'_id': str(server.id)})
-        result = bot.pre.get(str(server.id), 'pm!')
-    except AttributeError:
+        result = bot.pre[str(server.id)]
+    except KeyError:
+        # if not cached, insert into DB (this will override the configs, but they were not found to begin with)
+        await bot.db.config.update_one(
+            {'_id': str(server.id)},
+            {'$set': {'prefix': 'pm!', 'admin_role': 'polladmin', 'user_role': 'polluser'}},
+            upsert=True
+        )
+        bot.pre[str(server.id)] = 'pm!'
         return 'pm!'
     if not result:
         return 'pm!'

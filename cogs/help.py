@@ -263,87 +263,102 @@ class Help(commands.Cog):
         if message.author == self.bot.user:
             return
 
-        if message.content.startswith("@mention"):
-            channel = message.channel
-            if not isinstance(channel, discord.TextChannel):
-                await channel.send("@mention can only be used in a server text channel.")
-                return
+        if message.content.startswith(f"<@!{self.bot.user.id}>"):
+            print(message.content)
+            print(self.bot.user.name)
 
-            guild = message.guild
-            if not guild:
-                await channel.send("Could not determine your server.")
-                return
+            if message.content.startswith(f"<@!{self.bot.user.id}> mention"):
+                channel = message.channel
+                if not isinstance(channel, discord.TextChannel):
+                    await channel.send("@mention can only be used in a server text channel.")
+                    return
 
-            if message.content == "@mention":
-                await channel.send("The following @mention tags are available:\n🔹 @mention prefix")
-                return
+                guild = message.guild
+                if not guild:
+                    await channel.send("Could not determine your server.")
+                    return
 
-            try:
-                tag = message.content.split()[1].lower()
-            except IndexError:
-                await channel.send("Wrong formatting. Type \"@mention\" or \"@mention <tag>\".")
-                return
+                if message.content == f"<@!{self.bot.user.id}> mention":
+                    await channel.send("The following mention tags are available:\n🔹 mention prefix")
+                    return
 
-            if tag == "prefix":
-                pre = await get_server_pre(self.bot, guild)
-                # await channel.send(f'The prefix for this server/channel is: \n {pre} \n To change it type: \n'
-                #                    f'{pre}prefix <new_prefix>')
-                await channel.send(pre)
-            else:
-                await channel.send(f'Tag "{tag}" not found. Type "@mention" for a list of tags.')
+                try:
+                    tags = message.content.split()
+                    tag = tags[len(tags)-1].lower()
+                except IndexError:
+                    await channel.send(f"Wrong formatting. Type \"@{self.bot.user.name} mention\" or "
+                                       f"\"@{self.bot.user.name} mention <tag>\".")
+                    return
 
-        elif message.content == "@debug":
-            channel = message.channel
-            if not isinstance(channel, discord.TextChannel):
-                await channel.send("@debug can only be used in a server text channel.")
-                return
+                if tag == "prefix":
+                    pre = await get_server_pre(self.bot, guild)
+                    # await channel.send(f'The prefix for this server/channel is: \n {pre} \n To change it type: \n'
+                    #                    f'{pre}prefix <new_prefix>')
+                    await channel.send(pre)
+                else:
+                    await channel.send(f'Tag "{tag}" not found. Type `@{self.bot.user.name} mention` for a list of tags.')
 
-            guild = message.guild
-            if not guild:
-                await channel.send("Could not determine your server.")
-                return
+            if message.content.startswith(f"<@!{self.bot.user.id}> debug"):
+                channel = message.channel
+                if not isinstance(channel, discord.TextChannel):
+                    await channel.send("`debug` can only be used in a server text channel.")
+                    return
 
-            status_msg = ''
-            setup_correct = True
+                guild = message.guild
+                if not guild:
+                    await channel.send("Could not determine your server. Run the command in a server text channel.")
+                    return
 
-            # check send message permissions
-            permissions = channel.permissions_for(guild.me)
-            if not permissions.send_messages:
-                await message.author.send(f'I don\'t have permission to send text messages in channel "{channel}" '
-                                          f'on server "{guild}"')
-                return
+                status_msg = ''
+                setup_correct = True
 
-            status_msg += ' ✅ Sending text messages\n'
+                # check send message permissions
+                permissions = channel.permissions_for(guild.me)
+                if not permissions.send_messages:
+                    await message.author.send(f'I don\'t have permission to send text messages in channel "{channel}" '
+                                              f'on server "{guild}"')
+                    return
 
-            # check embed link permissions
-            if permissions.embed_links:
-                status_msg += '✅ Sending embedded messages\n'
-            else:
-                status_msg += '❗ Sending embedded messages. I need permissions to embed links!\n'
-                setup_correct = False
+                status_msg += ' ✅ Sending text messages\n'
 
-            # check manage messages
-            if permissions.manage_messages:
-                status_msg += '✅ Deleting messages and reactions\n'
-            else:
-                status_msg += '❗ Deleting messages and reactions. I need the manage messages permission!\n'
-                setup_correct = False
+                # check embed link permissions
+                if permissions.embed_links:
+                    status_msg += '✅ Sending embedded messages\n'
+                else:
+                    status_msg += '❗ Sending embedded messages. I need permissions to embed links!\n'
+                    setup_correct = False
 
-            # check adding reactions
-            if permissions.add_reactions:
-                status_msg += '✅ Adding reactions\n'
-            else:
-                status_msg += '❗ Adding reactions. I need the add reactions permission!\n'
-                setup_correct = False
+                # check manage messages
+                if permissions.manage_messages:
+                    status_msg += '✅ Deleting messages and reactions\n'
+                else:
+                    status_msg += '❗ Deleting messages and reactions. I need the manage messages permission!\n'
+                    setup_correct = False
 
-            if setup_correct:
-                status_msg += 'No action required. Your permissions are set up correctly for this channel. \n' \
-                              'If the bot does not work, feel free to join the support discord server.'
-            else:
-                status_msg += 'Please try to fix the issues above. \nIf you are still having problems, ' \
-                              'visit the support discord server.'
+                # check adding reactions
+                if permissions.add_reactions:
+                    status_msg += '✅ Adding reactions\n'
+                else:
+                    status_msg += '❗ Adding reactions. I need the add reactions permission!\n'
+                    setup_correct = False
 
-            await channel.send(status_msg)
+                # read message history
+                if permissions.read_message_history:
+                    status_msg += '✅ Reading message history\n'
+                else:
+                    status_msg += '❗ Reading message history. ' \
+                                  'I need to be able to read past messages in this channel!\n'
+                    setup_correct = False
+
+                if setup_correct:
+                    status_msg += 'No action required. As far as i can see, your permissions are set up correctly ' \
+                                  'for this channel. \n' \
+                                  'If the bot does not work, feel free to join the support discord server.'
+                else:
+                    status_msg += 'Please try to fix the issues above. \nIf you are still having problems, ' \
+                                  'visit the support discord server.'
+
+                await channel.send(status_msg)
 
 
 def setup(bot):
