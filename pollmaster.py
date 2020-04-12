@@ -37,7 +37,7 @@ logger = logging.getLogger('discord')
 logger.setLevel(logging.DEBUG)
 # create file handler which logs even debug messages
 fh = logging.FileHandler('pollmaster.log',  encoding='utf-8', mode='w')
-fh.setLevel(logging.DEBUG)
+fh.setLevel(logging.INFO)
 # create console handler with a higher log level
 ch = logging.StreamHandler()
 ch.setLevel(logging.ERROR)
@@ -123,7 +123,8 @@ async def on_command_error(ctx, e):
             commands.NoPrivateMessage,
             commands.CheckFailure,
             commands.CommandOnCooldown,
-            commands.MissingPermissions
+            commands.MissingPermissions,
+            discord.errors.Forbidden,
         )
 
         if isinstance(e, ignored_exceptions):

@@ -45,7 +45,7 @@ class PollControls(commands.Cog):
 
             # auto-close polls
             query = self.bot.db.polls.find({'open': True, 'duration': {
-                '$gte': utc_now - datetime.timedelta(minutes=15),
+                '$gte': utc_now - datetime.timedelta(weeks=8),
                 '$lte': utc_now + datetime.timedelta(minutes=1)
             }})
             if query:
@@ -79,7 +79,7 @@ class PollControls(commands.Cog):
 
             # auto-activate polls
             query = self.bot.db.polls.find({'active': False, 'activation': {
-                '$gte': utc_now - datetime.timedelta(minutes=15),
+                '$gte': utc_now - datetime.timedelta(weeks=8),
                 '$lte': utc_now + datetime.timedelta(minutes=1)
             }})
             if query:
@@ -907,14 +907,15 @@ class PollControls(commands.Cog):
             # await p.load_vote_counts()
             await p.load_unique_participants()
             # send current details of who currently voted for what
-            if (not p.open or not p.hide_count) and not p.anonymous and len(p.full_votes) > 0:
+            if not p.anonymous and len(p.full_votes) > 0:
                 msg = '--------------------------------------------\n' \
                       'VOTES\n' \
                       '--------------------------------------------\n'
                 for i, o in enumerate(p.options_reaction):
-                    if not p.options_reaction_default and not p.options_reaction_emoji_only:
-                        msg += AZ_EMOJIS[i] + " "
-                    msg += "**" + o + ":**"
+                    if not p.hide_count:
+                        if not p.options_reaction_default and not p.options_reaction_emoji_only:
+                            msg += AZ_EMOJIS[i] + " "
+                        msg += "**" + o + ":**"
                     c = 0
                     for vote in p.full_votes:
                         member = server.get_member(int(vote.user_id))
@@ -932,9 +933,10 @@ class PollControls(commands.Cog):
                         if len(msg) > 1500:
                             await user.send(msg)
                             msg = ''
-                    if c == 0:
+                    if c == 0 and not p.hide_count:
                         msg += '\nNo votes for this option yet.'
-                    msg += '\n\n'
+                    if not p.hide_count:
+                        msg += '\n\n'
 
                 if len(msg) > 0:
                     await user.send(msg)
@@ -963,7 +965,6 @@ class PollControls(commands.Cog):
                 if has_answers and len(msg) > 0:
                     await user.send(msg)
             return
-
         else:
             # Assume: User wants to vote with reaction
             # no rights, terminate function
