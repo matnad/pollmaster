@@ -155,7 +155,7 @@ class Poll:
         def check(m):
             return m.author == self.author
         try:
-            reply = await self.bot.wait_for('message', timeout=360, check=check)
+            reply = await self.bot.wait_for('message', timeout=600, check=check)
         except asyncio.TimeoutError:
             raise StopWizard
 
@@ -843,7 +843,7 @@ class Poll:
             return m.author == user
 
         try:
-            reply = await self.bot.wait_for('message', timeout=180, check=check)
+            reply = await self.bot.wait_for('message', timeout=600, check=check)
             if reply and reply.content:
                 reply = reply.content
             else:
@@ -1295,7 +1295,10 @@ class Poll:
 
             vote_display = []
             for i, r in enumerate(self.options_reaction):
-                vote_display.append(f'{r} {self.vote_counts_weighted.get(i, 0)}')
+                if self.hide_count and await self.is_open():
+                    vote_display.append(f'{r}')
+                else:
+                    vote_display.append(f'{r} {self.vote_counts_weighted.get(i, 0)}')
             embed = self.add_field_custom(name=text, value=' '.join(vote_display), embed=embed)
         else:
             # embed.add_field(name='\u200b', value='\u200b', inline=False)
