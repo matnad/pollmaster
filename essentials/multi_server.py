@@ -33,6 +33,9 @@ async def get_server_pre(bot, server):
         )
         bot.pre[str(server.id)] = 'pm!'
         return 'pm!'
+    except AttributeError:
+        # bot not ready
+        return 'pm!'
     if not result:
         return 'pm!'
     return result
