@@ -912,7 +912,7 @@ class PollControls(commands.Cog):
                       'VOTES\n' \
                       '--------------------------------------------\n'
                 for i, o in enumerate(p.options_reaction):
-                    if not p.hide_count:
+                    if not p.hide_count or not p.open:
                         if not p.options_reaction_default and not p.options_reaction_emoji_only:
                             msg += AZ_EMOJIS[i] + " "
                         msg += "**" + o + ":**"
@@ -933,9 +933,9 @@ class PollControls(commands.Cog):
                         if len(msg) > 1500:
                             await user.send(msg)
                             msg = ''
-                    if c == 0 and not p.hide_count:
+                    if c == 0 and (not p.hide_count or not p.open):
                         msg += '\nNo votes for this option yet.'
-                    if not p.hide_count:
+                    if not p.hide_count or not p.open:
                         msg += '\n\n'
 
                 if len(msg) > 0:
