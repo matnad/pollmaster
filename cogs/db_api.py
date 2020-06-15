@@ -11,9 +11,10 @@ class DiscordBotsOrgAPI(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self.token = SETTINGS.dbl_token
-        self.dblpy = dbl.DBLClient(self.bot, self.token)
-        self.update_stats.start()
+        if SETTINGS.mode != "development":
+            self.token = SETTINGS.dbl_token
+            self.dblpy = dbl.DBLClient(self.bot, self.token)
+            self.update_stats.start()
 
     def cog_unload(self):
         self.update_stats.cancel()

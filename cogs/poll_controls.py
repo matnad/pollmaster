@@ -111,7 +111,7 @@ class PollControls(commands.Cog):
 
     @close_activate_polls.before_loop
     async def before_close_activate_polls(self):
-        print('close task waiting...')
+        # print('close task waiting...')
         await self.bot.wait_until_ready()
 
     @tasks.loop(seconds=5)
@@ -135,7 +135,7 @@ class PollControls(commands.Cog):
 
     @refresh_queue.before_loop
     async def before_refresh_queue(self):
-        print('refresh task waiting...')
+        # print('refresh task waiting...')
         await self.bot.wait_until_ready()
 
     # General Methods
