@@ -102,7 +102,7 @@ class ClusterBot(commands.AutoShardedBot):
     async def on_command_error(self, ctx, exc):
         if not isinstance(exc, (commands.CommandNotFound, commands.NotOwner)):
             self.log.critical(''.join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
-            await ctx.send("check logs")
+            # await ctx.send("check logs")
 
     async def on_error(self, *args, **kwargs):
         self.log.critical(traceback.format_exc())
