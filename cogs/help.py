@@ -31,7 +31,11 @@ class Help(commands.Cog):
         try:
             reaction, user = await self.bot.wait_for('reaction_add', timeout=300, check=check)
         except asyncio.TimeoutError:
-            await msg.delete()
+            try:
+                await msg.delete()
+            except discord.errors.NotFound:
+                # message already deleted
+                pass
             return None
         else:
             if isinstance(reaction.message.channel, discord.TextChannel):

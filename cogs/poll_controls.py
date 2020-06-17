@@ -786,7 +786,11 @@ class PollControls(commands.Cog):
             user = server.get_member(user_id)
             message = self.bot.message_cache.get(message_id)
             if message is None:
-                message = await channel.fetch_message(id=message_id)
+                try:
+                    message = await channel.fetch_message(id=message_id)
+                except discord.errors.Forbidden:
+                    # Ignore Missing Access error
+                    return
                 self.bot.message_cache.put(message_id, message)
             label = self.get_label(message)
             if not label:

@@ -1566,7 +1566,10 @@ class Poll:
             self.bot.loop.create_task(f'Your vote for **{self.options_reaction[choice]}** has been removed.')
 
     def has_required_role(self, user):
-        return not set([r.name for r in user.roles]).isdisjoint(self.roles)
+        try:
+            return not set([r.name for r in user.roles]).isdisjoint(self.roles)
+        except AttributeError:
+            return False
 
     async def refresh(self, message, await_=False, force=False):
         # dont refresh if there was a refresh in the past 5 seconds

@@ -68,46 +68,47 @@ async def get_servers(bot, message, short=None):
 
 async def ask_for_server(bot, message, short=None):
     server_list = await get_servers(bot, message, short)
-    if server_list.__len__() == 0:
-        if short == None:
-            await bot.say(
-                'I could not find a common server where we can see eachother. If you think this is an error, '
-                'please contact the developer.')
-        else:
-            await bot.say(f'I could not find a server where the poll {short} exists that we both can see.')
-        return None
-    elif server_list.__len__() == 1:
+    if server_list.__len__() == 1:
         return server_list[0]
-    else:
-        text = 'I\'m not sure which server you are referring to. Please tell me by typing the corresponding number.\n'
-        i = 1
-        for name in [s.name for s in server_list]:
-            text += f'\n**{i}** - {name}'
-            i += 1
-        embed = discord.Embed(title="Select your server", description=text, color=SETTINGS.color)
-        server_msg = await message.channel.send(embed=embed)
+    else:  # server_list.__len__() == 0:
+        # if short == None:
+        #     await bot.say(
+        #         'I could not find a common server where we can see eachother. If you think this is an error, '
+        #         'please contact the developer.')
+        # else:
+        #     await bot.say(f'I could not find a server where the poll {short} exists that we both can see.')
+        return None
 
-        valid_reply = False
-        nr = 1
-        while valid_reply == False:
-            def check(m):
-                return message.author == m.author
-            try:
-                reply = await bot.wait_for('message', timeout=120, check=check)
-            except asyncio.TimeoutError:
-                pass
-            else:
-                if reply and reply.content:
-                    if reply.content.startswith(await get_pre(bot, message)):
-                        # await bot.say('You can\'t use bot commands while I am waiting for an answer.'
-                        #               '\n I\'ll stop waiting and execute your command.')
-                        return False
-                    if str(reply.content).isdigit():
-                        nr = int(reply.content)
-                        if 0 < nr <= server_list.__len__():
-                            valid_reply = True
-
-        return server_list[nr - 1]
+    # else:
+    #     text = 'I\'m not sure which server you are referring to. Please tell me by typing the corresponding number.\n'
+    #     i = 1
+    #     for name in [s.name for s in server_list]:
+    #         text += f'\n**{i}** - {name}'
+    #         i += 1
+    #     embed = discord.Embed(title="Select your server", description=text, color=SETTINGS.color)
+    #     server_msg = await message.channel.send(embed=embed)
+    #
+    #     valid_reply = False
+    #     nr = 1
+    #     while valid_reply == False:
+    #         def check(m):
+    #             return message.author == m.author
+    #         try:
+    #             reply = await bot.wait_for('message', timeout=120, check=check)
+    #         except asyncio.TimeoutError:
+    #             pass
+    #         else:
+    #             if reply and reply.content:
+    #                 if reply.content.startswith(await get_pre(bot, message)):
+    #                     # await bot.say('You can\'t use bot commands while I am waiting for an answer.'
+    #                     #               '\n I\'ll stop waiting and execute your command.')
+    #                     return False
+    #                 if str(reply.content).isdigit():
+    #                     nr = int(reply.content)
+    #                     if 0 < nr <= server_list.__len__():
+    #                         valid_reply = True
+    #
+    #     return server_list[nr - 1]
 
 
 async def ask_for_channel(ctx, bot, server, message):
