@@ -1,5 +1,7 @@
 # Pollmaster V 2.5
 
+[![Run on Repl.it](https://repl.it/badge/github/matnad/pollmaster)](https://repl.it/github/matnad/pollmaster)
+
 ## Overview
 
 With Pollmaster you can very easily create and manage complex polls on your server. 
