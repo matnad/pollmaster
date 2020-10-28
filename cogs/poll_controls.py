@@ -40,7 +40,7 @@ class PollControls(commands.Cog):
     # noinspection PyCallingNonCallable
     @tasks.loop(seconds=30)
     async def close_activate_polls(self):
-        if hasattr(self.bot, 'db'):
+        if hasattr(self.bot, 'db') and hasattr(self.bot.db, 'polls'):
             utc_now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
 
             # auto-close polls
@@ -152,7 +152,8 @@ class PollControls(commands.Cog):
         return label
 
     async def is_admin_or_creator(self, ctx, server, owner_id, error_msg=None):
-        member = server.get_member(ctx.message.author.id)
+        member = ctx.author
+        # member = server.get_member(ctx.message.author.id)
         if member.id == owner_id:
             return True
         elif member.guild_permissions.manage_guild:
@@ -463,7 +464,8 @@ class PollControls(commands.Cog):
                 return
             # print(voter_list)
             winner_id = random.choice(voter_list)
-            winner = server.get_member(int(winner_id))
+            # winner = server.get_member(int(winner_id))
+            winner = await self.bot.member_cache.get(server, int(winner_id))
             if not winner:
                 error = f'Invalid winner drawn (id: {winner_id}).'
                 await self.say_error(ctx, error)
@@ -669,7 +671,8 @@ class PollControls(commands.Cog):
         pre = await get_server_pre(self.bot, server)
 
         # Permission Check
-        member = server.get_member(ctx.message.author.id)
+        # member = server.get_member(ctx.message.author.id)
+        member = ctx.author
         if not member.guild_permissions.manage_guild:
             result = await self.bot.db.config.find_one({'_id': str(server.id)})
             if result and result.get('admin_role') not in [r.name for r in member.roles] and result.get(
@@ -719,7 +722,8 @@ class PollControls(commands.Cog):
 
         if isinstance(channel, discord.TextChannel):
             server = channel.guild
-            user = server.get_member(user_id)
+            # user = server.get_member(user_id)
+            user = await self.bot.member_cache.get(server, user_id)
             message = self.bot.message_cache.get(message_id)
             if message is None:
                 message = await channel.fetch_message(id=message_id)
@@ -775,15 +779,13 @@ class PollControls(commands.Cog):
         #     emoji_name = emoji.name
         if not emoji:
             return
-
         # check if we can find a poll label
         message_id = data.message_id
         channel_id = data.channel_id
         channel = self.bot.get_channel(channel_id)
-
         if isinstance(channel, discord.TextChannel):
             server = channel.guild
-            user = server.get_member(user_id)
+            # user = server.get_member(user_id)
             message = self.bot.message_cache.get(message_id)
             if message is None:
                 try:
@@ -825,9 +827,8 @@ class PollControls(commands.Cog):
         p = await Poll.load_from_db(self.bot, server.id, label)
         if not isinstance(p, Poll):
             return
-
-        member = server.get_member(user_id)
-
+        # member = server.get_member(user_id)
+        user = member = data.member
         # export
         if emoji.name == '📎':
             self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
@@ -843,6 +844,7 @@ class PollControls(commands.Cog):
             return
 
         # info
+
         elif emoji.name == '❔':
             self.ignore_next_removed_reaction[str(message.id) + str(emoji)] = user_id
             self.bot.loop.create_task(message.remove_reaction(emoji, member))  # remove reaction
@@ -852,7 +854,8 @@ class PollControls(commands.Cog):
             embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
 
             # created by
-            created_by = server.get_member(int(p.author.id))
+            created_by = await self.bot.member_cache.get(server, int(p.author.id))
+            # created_by = server.get_member(int(p.author.id))
             embed.add_field(name=f'Created by:', value=f'{created_by if created_by else "<Deleted User>"}',
                             inline=False)
 
@@ -904,7 +907,6 @@ class PollControls(commands.Cog):
                 time_left = str(deadline - datetime.datetime.utcnow().replace(tzinfo=pytz.utc)).split('.', 2)[0]
 
             embed.add_field(name='Time left in the poll:', value=time_left, inline=False)
-
             await user.send(embed=embed)
 
             await p.load_full_votes()
@@ -922,11 +924,12 @@ class PollControls(commands.Cog):
                         msg += "**" + o + ":**"
                     c = 0
                     for vote in p.full_votes:
-                        member = server.get_member(int(vote.user_id))
+                        # member = server.get_member(int(vote.user_id))
+                        member: discord.Member = await self.bot.member_cache.get(server, int(vote.user_id))
                         if not member or vote.choice != i:
                             continue
                         c += 1
-                        name = member.nick
+                        name = member.display_name
                         if not name:
                             name = member.name
                         if not name:

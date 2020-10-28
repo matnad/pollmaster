@@ -12,6 +12,7 @@ import websockets
 from discord.ext import commands
 from motor.motor_asyncio import AsyncIOMotorClient
 
+from essentials.membercache import MemberCache
 from essentials.messagecache import MessageCache
 from essentials.multi_server import get_pre
 from essentials.settings import SETTINGS
@@ -49,6 +50,7 @@ class ClusterBot(commands.AutoShardedBot):
             self.load_extension(ext)
 
         self.message_cache = MessageCache(self)
+        self.member_cache = MemberCache()
         self.refresh_blocked = {}
         self.refresh_queue = {}
 

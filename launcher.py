@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import multiprocessing
-import signal
 import os
+import signal
 import sys
 import time
 
@@ -10,7 +10,6 @@ import requests
 
 from bot import ClusterBot
 from essentials.multi_server import get_pre
-
 from essentials.settings import SETTINGS
 
 TOKEN = SETTINGS.bot_token
@@ -46,9 +45,11 @@ class Launcher:
         self.init = time.perf_counter()
 
     def get_shard_count(self):
+        if SETTINGS.mode == "development":
+            return 1
         data = requests.get('https://discordapp.com/api/v7/gateway/bot', headers={
             "Authorization": "Bot "+TOKEN,
-            "User-Agent": "DiscordBot (https://github.com/Rapptz/discord.py 1.3.3) Python/3.7 aiohttp/3.6.1"
+            "User-Agent": "DiscordBot (https://github.com/Rapptz/discord.py 1.5.1) Python/3.8 aiohttp/3.6.1"
         })
         data.raise_for_status()
         content = data.json()

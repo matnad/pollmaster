@@ -118,7 +118,8 @@ async def ask_for_channel(ctx, bot, server, message):
 
     # build channel list that the user is allowed to send messages to
     user = message.author
-    member = server.get_member(user.id)
+    # member = server.get_member(user.id)
+    member = await bot.member_cache.get(server, user.id)
     channel_list = [c for c in server.channels if isinstance(c, discord.TextChannel) and c.permissions_for(member).send_messages]
 
     # if exactly 1 channel, return it

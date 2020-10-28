@@ -1001,12 +1001,13 @@ class Poll:
                       '--------------------------------------------'
 
             for user_id in self.unique_participants:
-                member = self.server.get_member(int(user_id))
+                # member = self.server.get_member(int(user_id))
+                member = await self.bot.member_cache.get(self.server, int(user_id))
 
                 if not member:
                     name = "<Deleted User>"
                 else:
-                    name = member.nick
+                    name = member.display_name
                 if not name:
                     name = member.name
 
@@ -1043,12 +1044,12 @@ class Poll:
                       '--------------------------------------------'
 
             for user_id in self.unique_participants:
-                member = self.server.get_member(int(user_id))
-
+                # member = self.server.get_member(int(user_id))
+                member = await self.bot.member_cache.get(self.server, int(user_id))
                 if not member:
                     name = "<Deleted User>"
                 else:
-                    name = member.nick
+                    name = member.display_name
                 if not name:
                     name = member.name
 
@@ -1124,7 +1125,8 @@ class Poll:
         self.server = self.bot.get_guild(int(d['server_id']))
         self.channel = self.bot.get_channel(int(d['channel_id']))
         if self.server:
-            self.author = self.server.get_member(int(d['author']))
+            self.author = await self.bot.member_cache.get(self.server, int(d['author']))
+            # self.author = self.server.get_member(int(d['author']))
         else:
             self.author = None
         self.name = d['name']
