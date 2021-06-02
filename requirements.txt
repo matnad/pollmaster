@@ -26,6 +26,6 @@ six==1.15.0
 typing-extensions==3.7.4.3
 tzlocal==2.1
 Unidecode==1.1.1
-urllib3==1.25.11
+urllib3==1.26.5
 websockets==8.1
 yarl==1.4.2
