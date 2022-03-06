@@ -1487,6 +1487,7 @@ class Poll:
             if vote:
                 await vote.delete_from_db()
                 await self.refresh(message)
+                await self.bot.loop.create_task(user.send(f'Your vote for **{self.options_reaction[choice]}** has been REMOVED.'))
                 return
 
         # check if already voted for the same choice
@@ -1524,7 +1525,7 @@ class Poll:
             if not answer or answer.lower() == "-":
                 answer = "No Answer"
 
-        if self.anonymous and self.hide_count:
+        if self.anonymous or self.hide_count:
             self.bot.loop.create_task(user.send(f'Your vote for **{self.options_reaction[choice]}** has been counted.'))
 
         # commit
