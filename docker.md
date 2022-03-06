@@ -16,6 +16,7 @@ Execute the following commands from a terminal window:
 ```sh
 git clone https://github.com/matnad/pollmaster.git
 cd pollmaster
+mkdir data
 ```
 ##  Setup app and bot in Discord 
 
