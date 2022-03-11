@@ -1,3 +1,10 @@
+# This file adjusts some of the dependencies to a
+# version that seems to function in Docker. If
+# the main requirements.txt file is updated, those
+# changes could also be made in here. If this file
+# becomes an exact match to requirements.txt, update
+# Dockerfile to reference requirements.txt, then
+# delete this file.
 aiohttp
 async-timeout==3.0.1
 asyncpg==0.21.0
