@@ -17,3 +17,6 @@ export/
 
 #backup
 backup/
+
+# Docker development - data for mongodb
+data/

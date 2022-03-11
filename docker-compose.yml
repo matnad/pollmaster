@@ -1,0 +1,26 @@
+version: "3.5"
+services:
+  bot:
+    build: .
+    links:
+      - "mongodb:db"
+    volumes:
+      - type: bind
+        source: .
+        target: /usr/src/app
+  mongodb:
+    image: mongo:5.0.5
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=pmroot
+      - MONGO_INITDB_ROOT_PASSWORD=changeme
+    volumes:
+      - type: bind
+        source: ./data
+        target: /data/db
+      - type: bind
+        source: ./mongo-init.js
+        target: /docker-entrypoint-initdb.d/mongo-init.js
+        read_only: true
+    ports:
+      - "27107:27107"
+
