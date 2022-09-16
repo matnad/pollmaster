@@ -50,7 +50,6 @@ class ClusterBot(commands.AutoShardedBot):
             self.load_extension(ext)
 
         self.message_cache = MessageCache(self)
-        self.member_cache = MemberCache()
         self.refresh_blocked = {}
         self.refresh_queue = {}
 

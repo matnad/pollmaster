@@ -6,13 +6,14 @@ import traceback
 from contextlib import redirect_stdout
 
 from discord.ext import commands
+from discord import app_commands
 
 
 class Eval(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.hybrid_command(name="eval", description="""Evaluates a code""")
     @commands.is_owner()
     async def evall(self, ctx, *, body: str):
         self.bot.eval_wait = True
@@ -29,10 +30,10 @@ class Eval(commands.Cog):
         finally:
             self.bot.eval_wait = False
 
-    @commands.command(hidden=True, name='eval')
+    @commands.hybrid_command(hidden=True, name='eval', description="""Evaluates a code""")
     @commands.is_owner()
     async def _eval(self, ctx, *, body: str):
-        """Evaluates a code"""
+        
 
         env = {
             'bot': self.bot,
@@ -78,5 +79,5 @@ class Eval(commands.Cog):
                 await ctx.send(f'```py\n{value}{ret}\n```')
 
 
-def setup(bot):
-    bot.add_cog(Eval(bot))
+async def setup(bot):
+    await bot.add_cog(Eval(bot))

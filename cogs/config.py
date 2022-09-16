@@ -1,14 +1,15 @@
 import logging
 from discord.ext import commands
+from discord import app_commands
+from discord import Role
 
 class Config(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.hybrid_command(name="prefix", description="""Set a custom prefix for the server.""")
     @commands.has_permissions(manage_guild=True)
-    async def prefix(self, ctx, *, pre):
-        """Set a custom prefix for the server."""
+    async def prefix(self, ctx, *, pre:str):
         server = ctx.message.guild
         if pre.endswith('\w'):
             pre = pre[:-2]+' '
@@ -25,10 +26,9 @@ class Config(commands.Cog):
         self.bot.pre[str(server.id)] = str(pre)
         await ctx.send(msg)
 
-    @commands.command()
+    @commands.hybrid_command(name="adminrole", description="Set or show the Admin Role. Members with this role can create polls and manage ALL polls.")
     @commands.has_permissions(manage_guild=True)
-    async def adminrole(self, ctx, *, role=None):
-        """Set or show the Admin Role. Members with this role can create polls and manage ALL polls. Parameter: <role> (optional)"""
+    async def adminrole(self, ctx, *, role: Role = None):
         server = ctx.message.guild
 
         if not role:
@@ -47,11 +47,10 @@ class Config(commands.Cog):
         else:
             await ctx.send(f'Server role `{role}` not found.')
 
-    @commands.command()
+    @commands.hybrid_command(name="userrole", description="Set or show the User Role. Members with this role can create polls and manage their own polls.")
     @commands.has_permissions(manage_guild=True)
-    async def userrole(self, ctx, *, role=None):
-        """Set or show the User Role. Members with this role can create polls and manage their own polls. 
-        Parameter: <role> (optional)"""
+    async def userrole(self, ctx, *, role: Role=None):
+        
         server = ctx.message.guild
 
         if not role:
@@ -71,7 +70,7 @@ class Config(commands.Cog):
             await ctx.send(f'Server role `{role}` not found.')
 
 
-def setup(bot):
+async def setup(bot):
     global logger
     logger = logging.getLogger('discord')
-    bot.add_cog(Config(bot))
+    await bot.add_cog(Config(bot))

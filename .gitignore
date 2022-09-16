@@ -17,3 +17,5 @@ export/
 
 #backup
 backup/
+
+.env

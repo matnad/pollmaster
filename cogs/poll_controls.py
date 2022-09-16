@@ -10,7 +10,7 @@ import discord
 import pytz
 from bson import ObjectId
 from discord.ext import tasks, commands
-
+from discord import app_commands
 from essentials.exceptions import StopWizard
 from essentials.multi_server import get_server_pre, ask_for_server, ask_for_channel
 from essentials.settings import SETTINGS
@@ -191,7 +191,7 @@ class PollControls(commands.Cog):
     #     p = await Poll.load_from_db(self.bot, str(server.id), 'test', ctx=ctx)
     #     print(await Vote.load_number_of_voters_for_poll(self.bot, p.id))
 
-    @commands.command()
+    @commands.hybrid_command(name="activate")
     async def activate(self, ctx, *, short=None):
         """Activate a prepared poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -228,7 +228,7 @@ class PollControls(commands.Cog):
                 await self.say_error(ctx, error)
                 await ctx.invoke(self.show, 'prepared')
 
-    @commands.command()
+    @commands.hybrid_command(name="delete")
     async def delete(self, ctx, *, short=None):
         """Delete a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -267,7 +267,7 @@ class PollControls(commands.Cog):
                 footer = f'Type {pre}show to display all polls'
                 await self.say_error(ctx, error, footer)
 
-    @commands.command()
+    @commands.hybrid_command(name="close")
     async def close(self, ctx, *, short=None):
         """Close a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -301,7 +301,7 @@ class PollControls(commands.Cog):
                 await self.say_error(ctx, error)
                 await ctx.invoke(self.show)
 
-    @commands.command()
+    @commands.hybrid_command(name="copy")
     async def copy(self, ctx, *, short=None):
         """Copy a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -326,7 +326,7 @@ class PollControls(commands.Cog):
                 await self.say_error(ctx, error)
                 await ctx.invoke(self.show)
 
-    @commands.command()
+    @commands.hybrid_command(name="export")
     async def export(self, ctx, *, short=None):
         """Export a poll. Parameter: <label>"""
         server = await ask_for_server(self.bot, ctx.message, short)
@@ -368,7 +368,7 @@ class PollControls(commands.Cog):
                 await self.say_error(ctx, error)
                 await ctx.invoke(self.show)
 
-    @commands.command()
+    @commands.hybrid_command(name="show")
     async def show(self, ctx, short='open', start=0):
         """Show a list of open polls or show a specific poll.
         Parameters: "open" (default), "closed", "prepared" or <label>"""
@@ -417,7 +417,7 @@ class PollControls(commands.Cog):
                 footer = f'Type {pre}show to display all polls'
                 await self.say_error(ctx, error, footer)
 
-    @commands.command()
+    @commands.hybrid_command(name="draw")
     async def draw(self, ctx, short=None, opt=None):
         server = await ask_for_server(self.bot, ctx.message, short)
         if not server:
@@ -465,7 +465,7 @@ class PollControls(commands.Cog):
             # print(voter_list)
             winner_id = random.choice(voter_list)
             # winner = server.get_member(int(winner_id))
-            winner = await self.bot.member_cache.get(server, int(winner_id))
+            winner = self.bot.get_user(int(winner_id))
             if not winner:
                 error = f'Invalid winner drawn (id: {winner_id}).'
                 await self.say_error(ctx, error)
@@ -478,7 +478,7 @@ class PollControls(commands.Cog):
             await self.say_error(ctx, error)
             await ctx.invoke(self.show)
 
-    @commands.command()
+    @commands.hybrid_command(name="cmd")
     async def cmd(self, ctx, *, cmd=None):
         """The old, command style way paired with the wizard."""
         # await self.say_embed(ctx, say_text='This command is temporarily disabled.')
@@ -570,7 +570,7 @@ class PollControls(commands.Cog):
             logger.error("ERROR IN pm!cmd")
             logger.exception(error)
 
-    @commands.command()
+    @commands.hybrid_command(name="quick")
     async def quick(self, ctx, *, cmd=None):
         """Create a quick poll with just a question and some options. Parameters: <Question> (optional)"""
         server = await ask_for_server(self.bot, ctx.message)
@@ -592,7 +592,7 @@ class PollControls(commands.Cog):
         if poll:
             await poll.post_embed(poll.channel)
 
-    @commands.command()
+    @commands.hybrid_command(name="prepare")
     async def prepare(self, ctx, *, cmd=None):
         """Prepare a poll to use later. Parameters: <Question> (optional)"""
         server = await ask_for_server(self.bot, ctx.message)
@@ -616,7 +616,7 @@ class PollControls(commands.Cog):
         if poll:
             await poll.post_embed(ctx.message.author)
 
-    @commands.command()
+    @commands.hybrid_command(name="advanced")
     async def advanced(self, ctx, *, cmd=None):
         """Poll with more options. Parameters: <Question> (optional)"""
         server = await ask_for_server(self.bot, ctx.message)
@@ -639,7 +639,7 @@ class PollControls(commands.Cog):
         if poll:
             await poll.post_embed(poll.channel)
 
-    @commands.command()
+    @commands.hybrid_command(name="new")
     async def new(self, ctx, *, cmd=None):
         """Start the poll wizard to create a new poll step by step. Parameters: <Question> (optional)"""
         server = await ask_for_server(self.bot, ctx.message)
@@ -723,10 +723,10 @@ class PollControls(commands.Cog):
         if isinstance(channel, discord.TextChannel):
             server = channel.guild
             # user = server.get_member(user_id)
-            user = await self.bot.member_cache.get(server, user_id)
+            user = self.bot.get_user(user_id)
             message = self.bot.message_cache.get(message_id)
             if message is None:
-                message = await channel.fetch_message(id=message_id)
+                message = await channel.fetch_message(message_id)
                 self.bot.message_cache.put(message_id, message)
             label = self.get_label(message)
             if not label:
@@ -735,7 +735,7 @@ class PollControls(commands.Cog):
             user = await self.bot.fetch_user(user_id)  # only do this once
             message = self.bot.message_cache.get(message_id)
             if message is None:
-                message = await channel.fetch_message(id=message_id)
+                message = await channel.fetch_message(message_id)
                 self.bot.message_cache.put(message_id, message)
             label = self.get_label(message)
             if not label:
@@ -750,7 +750,7 @@ class PollControls(commands.Cog):
             channel = self.bot.get_channel(channel_id)
             message = self.bot.message_cache.get(message_id)
             if message is None:
-                message = await channel.fetch_message(id=message_id)
+                message = await channel.fetch_message(message_id)
                 self.bot.message_cache.put(message_id, message)
             label = self.get_label(message)
             if not label:
@@ -789,7 +789,7 @@ class PollControls(commands.Cog):
             message = self.bot.message_cache.get(message_id)
             if message is None:
                 try:
-                    message = await channel.fetch_message(id=message_id)
+                    message = await channel.fetch_message(message_id)
                 except discord.errors.Forbidden:
                     # Ignore Missing Access error
                     return
@@ -801,7 +801,7 @@ class PollControls(commands.Cog):
             user = await self.bot.fetch_user(user_id)  # only do this once
             message = self.bot.message_cache.get(message_id)
             if message is None:
-                message = await channel.fetch_message(id=message_id)
+                message = await channel.fetch_message(message_id)
                 self.bot.message_cache.put(message_id, message)
             label = self.get_label(message)
             if not label:
@@ -815,7 +815,7 @@ class PollControls(commands.Cog):
             channel = self.bot.get_channel(channel_id)
             message = self.bot.message_cache.get(message_id)
             if message is None:
-                message = await channel.fetch_message(id=message_id)
+                message = await channel.fetch_message(message_id)
                 self.bot.message_cache.put(message_id, message)
             label = self.get_label(message)
             if not label:
@@ -854,9 +854,12 @@ class PollControls(commands.Cog):
             embed.set_author(name=f" >> {p.short}", icon_url=SETTINGS.author_icon)
 
             # created by
-            created_by = await self.bot.member_cache.get(server, int(p.author.id))
+            if (p.author != None):
+                created_by = self.bot.get_user(int(p.author.id))
+            else:
+                created_by = "<Deleted User>"
             # created_by = server.get_member(int(p.author.id))
-            embed.add_field(name=f'Created by:', value=f'{created_by if created_by else "<Deleted User>"}',
+            embed.add_field(name=f'Created by:', value=f'{created_by}',
                             inline=False)
 
             # vote rights
@@ -925,7 +928,7 @@ class PollControls(commands.Cog):
                     c = 0
                     for vote in p.full_votes:
                         # member = server.get_member(int(vote.user_id))
-                        member: discord.Member = await self.bot.member_cache.get(server, int(vote.user_id))
+                        member: discord.Member = self.bot.get_user(int(vote.user_id))
                         if not member or vote.choice != i:
                             continue
                         c += 1
@@ -1001,7 +1004,7 @@ class PollControls(commands.Cog):
             await p.vote(member, emoji.name, message)
 
 
-def setup(bot):
+async def setup(bot):
     global logger
     logger = logging.getLogger('discord')
-    bot.add_cog(PollControls(bot))
+    await bot.add_cog(PollControls(bot))
