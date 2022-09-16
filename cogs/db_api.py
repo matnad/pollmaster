@@ -34,7 +34,7 @@ class DiscordBotsOrgAPI(commands.Cog):
             logger.exception('Failed to post server count\n{}: {}'.format(type(e).__name__, e))
 
 
-def setup(bot):
+async def setup(bot):
     global logger
     logger = logging.getLogger('discord')
-    bot.add_cog(DiscordBotsOrgAPI(bot))
+    await bot.add_cog(DiscordBotsOrgAPI(bot))

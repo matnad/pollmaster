@@ -16,7 +16,6 @@ import regex
 from bson import ObjectId
 from matplotlib import rcParams
 from matplotlib.afm import AFM
-from pytz import UnknownTimeZoneError
 from unidecode import unidecode
 
 from essentials.exceptions import *
@@ -1002,7 +1001,7 @@ class Poll:
 
             for user_id in self.unique_participants:
                 # member = self.server.get_member(int(user_id))
-                member = await self.bot.member_cache.get(self.server, int(user_id))
+                member = self.bot.get_user(int(user_id))
 
                 if not member:
                     name = "<Deleted User>"
@@ -1045,7 +1044,7 @@ class Poll:
 
             for user_id in self.unique_participants:
                 # member = self.server.get_member(int(user_id))
-                member = await self.bot.member_cache.get(self.server, int(user_id))
+                member = self.bot.get_user(int(user_id))
                 if not member:
                     name = "<Deleted User>"
                 else:
@@ -1124,8 +1123,8 @@ class Poll:
         self.id = ObjectId(str(d['_id']))
         self.server = self.bot.get_guild(int(d['server_id']))
         self.channel = self.bot.get_channel(int(d['channel_id']))
-        if self.server:
-            self.author = await self.bot.member_cache.get(self.server, int(d['author']))
+        if self.server != None:
+            self.author = self.bot.get_user(int(d['author']))
             # self.author = self.server.get_member(int(d['author']))
         else:
             self.author = None
@@ -1225,6 +1224,8 @@ class Poll:
     async def load_full_votes(self):
         if not self.full_votes:
             self.full_votes = await Vote.load_all_votes_for_poll(self.bot, self.id)
+
+
 
     def add_field_custom(self, name, value, embed):
         """this is used to estimate the width of text and add empty embed fields for a cleaner report
@@ -1482,7 +1483,7 @@ class Poll:
                 weight = max(valid_weights)
 
         # unvote for anon and hidden count
-        if self.anonymous or self.hide_count:
+        if self.anonymous or self.hide_count and user != None:
             vote = await Vote.load_from_db(self.bot, self.id, user.id, choice)
             if vote:
                 await vote.delete_from_db()

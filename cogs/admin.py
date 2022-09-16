@@ -22,7 +22,7 @@ class Admin(commands.Cog):
         else:
             logger.warning(error)
 
-    @commands.command(aliases=['r'])
+    @commands.hybrid_command(aliases=['r'], description="Reloads cogs")
     async def reload(self, ctx, *, cog):
         if cog == 'c':
             cog = 'poll_controls'
@@ -31,7 +31,7 @@ class Admin(commands.Cog):
 
         reply = ''
         try:
-            self.bot.reload_extension('cogs.'+cog)
+            await self.bot.reload_extension('cogs.'+cog)
             reply = f'Extension "cogs.{cog}" successfully reloaded.'
         except commands.ExtensionNotFound:
             reply = f'Extension "cogs.{cog}" not found.'
@@ -42,7 +42,7 @@ class Admin(commands.Cog):
         except commands.ExtensionNotLoaded:
             reply = f'Extension "cogs.{cog}" is not loaded... trying to load it. '
             try:
-                self.bot.load_extension('cogs.'+cog)
+                await self.bot.load_extension('cogs.'+cog)
             except commands.ExtensionAlreadyLoaded:
                 reply += f'Could not load or reload extension since it is already loaded...'
             except commands.ExtensionNotFound:
@@ -54,7 +54,7 @@ class Admin(commands.Cog):
             await ctx.send(reply)
 
 
-def setup(bot):
+async def setup(bot):
     global logger
     logger = logging.getLogger('discord')
-    bot.add_cog(Admin(bot))
+    await bot.add_cog(Admin(bot))
