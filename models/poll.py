@@ -14,8 +14,8 @@ import discord
 import pytz
 import regex
 from bson import ObjectId
-from utils.afm import AFM
-from pytz import UnknownTimeZoneError
+from matplotlib import rcParams
+from matplotlib.afm import AFM
 from unidecode import unidecode
 
 from essentials.exceptions import *
@@ -28,10 +28,8 @@ logger = logging.getLogger('discord')
 
 # Helvetica is the closest font to Whitney (discord uses Whitney) in afm
 # This is used to estimate text width and adjust the layout of the embeds
-script_dir = os.path.dirname(__file__) #<-- absolute dir the script is in
-rel_path = "phvr8a.afm"
-
-with open(script_dir + "/" + rel_path, 'rb') as fh:
+afm_fname = os.path.join(rcParams['datapath'], 'fonts', 'afm', 'phvr8a.afm')
+with open(afm_fname, 'rb') as fh:
     afm = AFM(fh)
 
 # A-Z Emojis for Discord
